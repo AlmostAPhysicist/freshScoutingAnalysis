@@ -230,22 +230,23 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   iEvent.getByToken(seed_tracks_token_, seed_track_handle);
 
 
-  //  const edm::Ref<reco::Track> leadingTrackRef(seed_track_refs, 0);
-
-  //Build transient tracks from reco tracks
-  std::vector<reco::TransientTrack> seed_tracks = tt_builder.build(seed_track_handle);
-
-
   std::vector<reco::TrackRef> seed_track_refs;
-
+  
   for (size_t i_tk = 0; i_tk < seed_track_handle->size(); i_tk++){
     const edm::Ref<reco::TrackCollection> tk_ref(seed_track_handle, i_tk);
     seed_track_refs.push_back(tk_ref);
   }
   
+  //  const edm::Ref<reco::Track> leadingTrackRef(seed_track_refs, 0);
+
+  //Build transient tracks from reco tracks
+  std::vector<reco::TransientTrack> seed_tracks;
+
+   
   //Former map from tracks to the number of seed tracks
   std::map<reco::TrackRef, size_t> seed_track_ref_map;
   for (const reco::TrackRef& tk : seed_track_refs) {
+    seed_tracks.push_back(tt_builder.build(tk));
     seed_track_ref_map[tk] = seed_tracks.size() - 1;
   }
   
@@ -317,15 +318,15 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   std::vector<reco::Vertex>::iterator v[2];
 
 
-  int vertices_loop_limit = 0;
+  //int vertices_loop_limit = 0;
   for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0]) {
-    vertices_loop_limit++;
-    if (vertices_loop_limit > 5000) continue;
+    //vertices_loop_limit++;
+    //if (vertices_loop_limit > 5000) continue;
 
-    printf("loop over vertices \n");
+    //printf("loop over vertices \n");
     track_set tracks[2];
     tracks[0] = vertex_track_set(*v[0]);
-
+    
     if (tracks[0].size() < 2) {
       v[0] = vertices->erase(v[0]) - 1;
       ++n_onetracks;
@@ -336,7 +337,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     bool merge = false;
     bool refit = false;
     track_set tracks_to_remove_in_refit[2];
-
+    
     for (v[1] = v[0] + 1; v[1] != vertices->end(); ++v[1]) {
       tracks[1] = vertex_track_set(*v[1]);
 
@@ -346,7 +347,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
         continue;
       }
 
-
+      
       if (is_track_subset(tracks[0], tracks[1])) {
         duplicate = true;
         break;
@@ -357,84 +358,91 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
         if (tracks[1].count(tk) > 0)
           shared_tracks.push_back(tk);
 
-
-      Measurement1D v_dist = vertex_dist(*v[0], *v[1]);
-
-      printf("vertex dist = %f, vertex sig = %f\n", v_dist.value(), v_dist.significance());
-      
-      if (v_dist.value() < merge_shared_dist || v_dist.significance() < merge_shared_sig)
-	merge = true;
-      else
-	refit = true;
-
-            
-      for (auto tk : shared_tracks) {
-	const reco::TransientTrack& ttk = seed_tracks[seed_track_ref_map[tk]];
-	std::pair<bool, Measurement1D> t_dist_0 = track_dist(ttk, *v[0]);
-	std::pair<bool, Measurement1D> t_dist_1 = track_dist(ttk, *v[1]);
-      
-
-	t_dist_0.first = t_dist_0.first && (t_dist_0.second.value() < max_track_vertex_dist || t_dist_0.second.significance() < max_track_vertex_sig);
-	t_dist_1.first = t_dist_1.first && (t_dist_1.second.value() < max_track_vertex_dist || t_dist_1.second.significance() < max_track_vertex_sig);
-	bool remove_from_0 = !t_dist_0.first;
-	bool remove_from_1 = !t_dist_1.first;
-	if (t_dist_0.second.significance() < min_track_vertex_sig_to_remove && t_dist_1.second.significance() < min_track_vertex_sig_to_remove) {
-	  if (tracks[0].size() > tracks[1].size())
+      if (shared_tracks.size() > 0){
+	Measurement1D v_dist = vertex_dist(*v[0], *v[1]);
+	
+	//printf("vertex dist = %f, vertex sig = %f\n", v_dist.value(), v_dist.significance());
+	
+	if (v_dist.value() < merge_shared_dist || v_dist.significance() < merge_shared_sig)
+	  merge = true;
+	else
+	  refit = true;
+	
+        
+	for (auto tk : shared_tracks) {
+	  const reco::TransientTrack& ttk = seed_tracks[seed_track_ref_map[tk]];
+	  std::pair<bool, Measurement1D> t_dist_0 = track_dist(ttk, *v[0]);
+	  std::pair<bool, Measurement1D> t_dist_1 = track_dist(ttk, *v[1]);
+	  
+	  
+	  t_dist_0.first = t_dist_0.first && (t_dist_0.second.value() < max_track_vertex_dist || t_dist_0.second.significance() < max_track_vertex_sig);
+	  t_dist_1.first = t_dist_1.first && (t_dist_1.second.value() < max_track_vertex_dist || t_dist_1.second.significance() < max_track_vertex_sig);
+	  bool remove_from_0 = !t_dist_0.first;
+	  bool remove_from_1 = !t_dist_1.first;
+	  if (t_dist_0.second.significance() < min_track_vertex_sig_to_remove && t_dist_1.second.significance() < min_track_vertex_sig_to_remove) {
+	    if (tracks[0].size() > tracks[1].size())
+	    remove_from_1 = true;
+	    else
+	      remove_from_0 = true;
+	  }
+	  else if (t_dist_0.second.significance() < t_dist_1.second.significance())
 	    remove_from_1 = true;
 	  else
 	    remove_from_0 = true;
+	  
+	  if (remove_from_0) tracks_to_remove_in_refit[0].insert(tk);
+	  if (remove_from_1) tracks_to_remove_in_refit[1].insert(tk);
+	  
+	  if (remove_one_track_at_a_time) break;
 	}
-	else if (t_dist_0.second.significance() < t_dist_1.second.significance())
-	  remove_from_1 = true;
-	else
-	  remove_from_0 = true;
 	
-	if (remove_from_0) tracks_to_remove_in_refit[0].insert(tk);
-	if (remove_from_1) tracks_to_remove_in_refit[1].insert(tk);
+	break;
 	
-	if (remove_one_track_at_a_time) break;
       }
-      
-      break;
     }
-
+        
     if (duplicate) {
       vertices->erase(v[1]);
     }
-    
+
     else if (merge) {
       track_set tracks_to_fit;
       for (int i = 0; i < 2; ++i)
         for (auto tk : tracks[i])
           tracks_to_fit.insert(tk);
-
+      
       std::vector<reco::TransientTrack> ttks;
       for (auto tk : tracks_to_fit)
 	ttks.push_back(seed_tracks[seed_track_ref_map[tk]]);
       
       reco::VertexCollection new_vertices;
       
-      for (const TransientVertex& tv : kv_reco_dropin(ttks))
+      for (const TransientVertex& tv : kv_reco_dropin(ttks)){
+	
 	new_vertices.push_back(reco::Vertex(tv));
-    
+	
+      }
       // If we got two new vertices, maybe it took A B and A C D and made a better one from B C D, and left a broken one A B! C! D!.
       // If we get one that is truly the merger of the track lists, great. If it is just something like A B , A C . A B C!, or we get nothing, then default to arbitration.
       if (new_vertices.size() > 1) {
         assert(new_vertices.size() == 2);
         *v[1] = reco::Vertex(new_vertices[1]);
         *v[0] = reco::Vertex(new_vertices[0]);
+	
       }
       else if (new_vertices.size() == 1 && vertex_track_set(new_vertices[0], 0) == tracks_to_fit) {
         vertices->erase(v[1]);
+	
         *v[0] = reco::Vertex(new_vertices[0]); // ok to use v[0] after the erase(v[1]) because v[0] is by construction before v[1]
+	
       }
       else refit = true;
-
+      
     }
       if (refit) {
 	bool erase[2] = { false };
 	reco::Vertex vsave[2] = { *v[0], *v[1] };
-
+	
 	for (int i = 0; i < 2; ++i) {
 	  if (tracks_to_remove_in_refit[i].empty())
 	    continue;
@@ -461,10 +469,11 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
     // If we changed the vertices at all, start loop over completely.
     if (duplicate || merge || refit) {
-      printf("duplicate = %d, merge = %d, refit = %d\n", duplicate, merge, refit);
+      //printf("duplicate = %d, merge = %d, refit = %d\n", duplicate, merge, refit);
+      
       v[0] = vertices->begin() - 1;  // -1 because about to ++sv
       ++n_resets;
-
+      
       if (n_resets == 3000)
         throw "I'm dumb";
     }
@@ -497,6 +506,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   
   //Save the vertices
   iEvent.emplace(putToken_, std::move(*vertices));
+  
 }
 
 // ------------ method called once each stream before processing any runs, lumis or events  ------------

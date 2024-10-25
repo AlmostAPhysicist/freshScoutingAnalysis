@@ -3,9 +3,9 @@ import FWCore.ParameterSet.Config as cms
 process = cms.Process("TESTVERTEX")
 
 process.load("FWCore.MessageService.MessageLogger_cfi")
-process.options = cms.untracked.PSet(
-    wantSummary = cms.untracked.bool(True)
-)
+#process.options = cms.untracked.PSet(
+#    wantSummary = cms.untracked.bool(True)
+#)
 
 process.MessageLogger.cerr.FwkSummary.reportEvery = 1
 process.MessageLogger.cerr.FwkReport.reportEvery = 1
@@ -19,12 +19,15 @@ process.source = cms.Source("PoolSource",
     )
 )
 
-#Choosing the GlobalTag
+
 process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
 process.load('Configuration.StandardSequences.GeometryRecoDB_cff')
 process.load("Configuration.StandardSequences.MagneticField_cff")
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
+
+
+#Choosing the GlobalTag  
 from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, '133X_mcRun3_2024_realistic_v9', '')  
 process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
