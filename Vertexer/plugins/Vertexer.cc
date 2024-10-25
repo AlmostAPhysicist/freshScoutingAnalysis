@@ -221,6 +221,7 @@ std::vector<TransientVertex> kv_reco_dropin(std::vector<reco::TransientTrack> & 
 // ------------ method called to produce the data  ------------
 void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
+  printf("started the producer");
   //Get the Transient Track Builder
   auto const &tt_builder = iSetup.getData(token_builder);
 
@@ -255,10 +256,16 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   // Form seed vertices from all pairs of tracks whose vertex fit
   // passes cuts.
   //////////////////////////////////////////////////////////////////////
-  
-  reco::VertexCollection vertices;
-  
+
   const size_t ntk = seed_tracks.size();
+  
+  std::unique_ptr<reco::VertexCollection> vertices(new reco::VertexCollection);
+  
+  if (ntk == 0) {
+    iEvent.emplace(putToken_, std::move(*vertices));
+    return;
+  }  
+
   //printf("n_seed_tracks: %5lu\n", ntk);
 
   std::vector<size_t> itks(n_tracks_per_seed_vertex, 0);
@@ -270,10 +277,10 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
     TransientVertex seed_vertex = kv_reco.vertex(ttks);
     if (seed_vertex.isValid() && seed_vertex.normalisedChiSquared() < max_seed_vertex_chi2) { 
-      vertices.push_back(reco::Vertex(seed_vertex));
+      vertices->push_back(reco::Vertex(seed_vertex));
     }
   };
-			 
+
   // ha
   for (size_t itk = 0; itk < ntk; ++itk) {
     itks[0] = itk;
@@ -302,17 +309,25 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   // the vertex to which it is "closer".
   //////////////////////////////////////////////////////////////////////
 
+  printf("entering the track sharing part\n");
+  
   track_set discarded_tracks;
   int n_resets = 0;
   int n_onetracks = 0;
   std::vector<reco::Vertex>::iterator v[2];
 
-  for (v[0] = vertices.begin(); v[0] != vertices.end(); ++v[0]) {
+
+  int vertices_loop_limit = 0;
+  for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0]) {
+    vertices_loop_limit++;
+    if (vertices_loop_limit > 5000) continue;
+
+    printf("loop over vertices \n");
     track_set tracks[2];
     tracks[0] = vertex_track_set(*v[0]);
 
     if (tracks[0].size() < 2) {
-      v[0] = vertices.erase(v[0]) - 1;
+      v[0] = vertices->erase(v[0]) - 1;
       ++n_onetracks;
       continue;
     }
@@ -322,11 +337,11 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     bool refit = false;
     track_set tracks_to_remove_in_refit[2];
 
-    for (v[1] = v[0] + 1; v[1] != vertices.end(); ++v[1]) {
+    for (v[1] = v[0] + 1; v[1] != vertices->end(); ++v[1]) {
       tracks[1] = vertex_track_set(*v[1]);
 
       if (tracks[1].size() < 2) {
-	v[1] = vertices.erase(v[1]) - 1;
+	v[1] = vertices->erase(v[1]) - 1;
         ++n_onetracks;
         continue;
       }
@@ -344,10 +359,11 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
 
       Measurement1D v_dist = vertex_dist(*v[0], *v[1]);
+
+      printf("vertex dist = %f, vertex sig = %f\n", v_dist.value(), v_dist.significance());
       
-      if (v_dist.value() < merge_shared_dist || v_dist.significance() < merge_shared_sig) {
+      if (v_dist.value() < merge_shared_dist || v_dist.significance() < merge_shared_sig)
 	merge = true;
-      }
       else
 	refit = true;
 
@@ -383,7 +399,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     }
 
     if (duplicate) {
-      vertices.erase(v[1]);
+      vertices->erase(v[1]);
     }
     
     else if (merge) {
@@ -409,7 +425,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
         *v[0] = reco::Vertex(new_vertices[0]);
       }
       else if (new_vertices.size() == 1 && vertex_track_set(new_vertices[0], 0) == tracks_to_fit) {
-        vertices.erase(v[1]);
+        vertices->erase(v[1]);
         *v[0] = reco::Vertex(new_vertices[0]); // ok to use v[0] after the erase(v[1]) because v[0] is by construction before v[1]
       }
       else refit = true;
@@ -438,18 +454,19 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
           erase[i] = true;
 	}
 
-      if (erase[1]) vertices.erase(v[1]);
-      if (erase[0]) vertices.erase(v[0]);
+      if (erase[1]) vertices->erase(v[1]);
+      if (erase[0]) vertices->erase(v[0]);
 
       }
 
     // If we changed the vertices at all, start loop over completely.
     if (duplicate || merge || refit) {
-      v[0] = vertices.begin() - 1;  // -1 because about to ++sv
+      printf("duplicate = %d, merge = %d, refit = %d\n", duplicate, merge, refit);
+      v[0] = vertices->begin() - 1;  // -1 because about to ++sv
       ++n_resets;
 
-      //if (n_resets == 3000)
-      //  throw "I'm dumb";
+      if (n_resets == 3000)
+        throw "I'm dumb";
     }
   }
 
@@ -479,7 +496,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   //////////////////////////////////////////////////////////////////////
   
   //Save the vertices
-  iEvent.emplace(putToken_, std::move(vertices));
+  iEvent.emplace(putToken_, std::move(*vertices));
 }
 
 // ------------ method called once each stream before processing any runs, lumis or events  ------------
