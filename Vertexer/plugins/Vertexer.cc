@@ -92,7 +92,16 @@ private:
   const double max_track_vertex_dist;
   const double max_track_vertex_sig;
   const double min_track_vertex_sig_to_remove;
-  
+  const bool resolve_split_vertices_loose;
+  const bool resolve_split_vertices_tight;
+  const double merge_anyway_sig;
+  const double merge_anyway_dist;
+  const double max_nm1_refit_dist3;
+  const double max_nm1_refit_distz;
+  const int max_nm1_refit_count;
+  const bool investigate_merged_vertices;
+
+  const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::Track>> seed_tracks_token_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> token_builder;
 
@@ -105,11 +114,12 @@ private:
 
   // ----------member data ---------------------------
 
-  //Will get the beamspot from the GT later. For now, set it =0 to test
+  /*//Will get the beamspot from the GT later. For now, set it =0 to test
   float bsx = 0;
   float bsy = 0;
   float bsz = 0;
-
+  */
+  
   VertexDistanceXY vertex_dist_2d;
   VertexDistance3D vertex_dist_3d;
 
@@ -135,23 +145,19 @@ private:
       return vertex_dist_3d.distance(v0, v1);
   }
   
-  track_set vertex_track_set(const reco::Vertex & v, const double min_weight = 0.5) {
-    track_set result;
+    track_set vertex_track_set(const reco::Vertex & v, const double min_weight = 0.5) const {
+      track_set result;
 
-    //reco::Track track_test;
-    
-    for (auto it = v.tracks_begin(), ite = v.tracks_end(); it != ite; ++it) {
-      const double w = v.trackWeight(*it);
-      const bool use = w >= min_weight;
-      assert(use);
-
-      if (use) {
-	const auto theTrackRef = it->castTo<reco::TrackRef>();
-	result.insert(theTrackRef);
+      for (auto it = v.tracks_begin(), ite = v.tracks_end(); it != ite; ++it) {
+        const double w = v.trackWeight(*it);
+        const bool use = w >= min_weight;
+        assert(use);
+        //if (verbose) ("trk #%2i pt %6.3f eta %6.3f phi %6.3f dxy %6.3f dz %6.3f w %5.3f  use? %i\n", int(it-v.tracks_begin()), (*it)->pt(), (*it)->eta(), (*it)->phi(), (*it)->dxy(), (*it)->dz(), w, use);
+        if (use)
+          result.insert(it->castTo<reco::TrackRef>());
       }
-    }
-    
-    return result;
+
+      return result;
     }
 
   /* //Returns an empty track_set to test the function above
@@ -168,6 +174,11 @@ private:
       return IPTools::absoluteImpactParameter3D(t, v);
   }
   
+  track_vec vertex_track_vec(const reco::Vertex & v, const double min_weight = 0.5) const {
+    track_set s = vertex_track_set(v, min_weight);
+    return track_vec(s.begin(), s.end());
+  }
+
   
 };
 
@@ -196,7 +207,16 @@ Vertexer::Vertexer(edm::ParameterSet const& params)
   max_track_vertex_dist(params.getParameter<double>("max_track_vertex_dist")),
   max_track_vertex_sig(params.getParameter<double>("max_track_vertex_sig")),
   min_track_vertex_sig_to_remove(params.getParameter<double>("min_track_vertex_sig_to_remove")),
-  
+  resolve_split_vertices_loose(params.getParameter<bool>("resolve_split_vertices_loose")),
+  resolve_split_vertices_tight(params.getParameter<bool>("resolve_split_vertices_tight")),
+  merge_anyway_sig(params.getParameter<double>("merge_anyway_sig")),
+  merge_anyway_dist(params.getParameter<double>("merge_anyway_dist")),
+  max_nm1_refit_dist3(params.getParameter<double>("max_nm1_refit_dist3")),
+  max_nm1_refit_distz(params.getParameter<double>("max_nm1_refit_distz")),
+  max_nm1_refit_count(params.getParameter<int>("max_nm1_refit_count")),
+  investigate_merged_vertices(params.getParameter<bool>("investigate_merged_vertices")),
+
+  beamspot_token(consumes<reco::BeamSpot>(params.getParameter<edm::InputTag>("beamspot_src"))),
   seed_tracks_token_(consumes(params.getParameter<edm::InputTag>("seed_tracks_src"))),
   token_builder(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
   putToken_{produces()} {}
@@ -221,7 +241,14 @@ std::vector<TransientVertex> kv_reco_dropin(std::vector<reco::TransientTrack> & 
 // ------------ method called to produce the data  ------------
 void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
-  printf("started the producer");
+  edm::Handle<reco::BeamSpot> beamspot;
+  iEvent.getByToken(beamspot_token, beamspot);
+  const double bsx = beamspot->position().x();
+  const double bsy = beamspot->position().y();
+  //const double bsz = beamspot->position().z();
+  const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
+  
+  //printf("started the producer");
   //Get the Transient Track Builder
   auto const &tt_builder = iSetup.getData(token_builder);
 
@@ -310,14 +337,14 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   // the vertex to which it is "closer".
   //////////////////////////////////////////////////////////////////////
 
-  printf("entering the track sharing part\n");
+  //printf("entering the track sharing part\n");
   
   track_set discarded_tracks;
   int n_resets = 0;
   int n_onetracks = 0;
   std::vector<reco::Vertex>::iterator v[2];
 
-
+  //size_t ivtx[2];
   //int vertices_loop_limit = 0;
   for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0]) {
     //vertices_loop_limit++;
@@ -325,6 +352,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
     //printf("loop over vertices \n");
     track_set tracks[2];
+    //ivtx[0] = v[0] - vertices->begin();
     tracks[0] = vertex_track_set(*v[0]);
     
     if (tracks[0].size() < 2) {
@@ -339,6 +367,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     track_set tracks_to_remove_in_refit[2];
     
     for (v[1] = v[0] + 1; v[1] != vertices->end(); ++v[1]) {
+      //ivtx[1] = v[1] - vertices->begin();
       tracks[1] = vertex_track_set(*v[1]);
 
       if (tracks[1].size() < 2) {
@@ -485,10 +514,119 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Merge vertices that are still "close" in 2D, aka "loose" merging (typically off by default)
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+
+  if (resolve_split_vertices_loose) {
+
+    
+    if (merge_anyway_sig > 0 || merge_anyway_dist > 0) {
+      //double v0x;
+      //double v0y;
+      //double phi0;
+      
+      for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0]) {
+        //ivtx[0] = v[0] - vertices->begin();
+
+        //double v1x;
+        //double v1y;
+        //double phi1;
+
+        for (v[1] = v[0] + 1; v[1] != vertices->end(); ++v[1]) {
+
+          //ivtx[1] = v[1] - vertices->begin();
+
+
+          Measurement1D v_dist = vertex_dist(*v[0], *v[1]);
+
+          //v0x = v[0]->x() - bsx;
+          //v0y = v[0]->y() - bsy;
+          //phi0 = atan2(v0y, v0x);
+          //v1x = v[1]->x() - bsx;
+          //v1y = v[1]->y() - bsy;
+          //phi1 = atan2(v1y, v1x);
+
+          if (v_dist.value() < merge_anyway_dist || v_dist.significance() < merge_anyway_sig) {
+
+            std::vector<reco::TransientTrack> ttks;
+
+            for (int i = 0; i < 2; ++i) {
+              for (auto tk : vertex_track_set(*v[i])) {
+                ttks.push_back(tt_builder.build(tk));
+              }
+            }
+
+            reco::VertexCollection merged_vertices;
+            for (const TransientVertex& tv : kv_reco_dropin(ttks)) {
+              merged_vertices.push_back(reco::Vertex(tv));
+
+              for (auto it = merged_vertices[0].tracks_begin(), ite = merged_vertices[0].tracks_end(); it != ite; ++it) {
+                reco::TransientTrack seed_track;
+                seed_track = tt_builder.build(*it.operator*());
+                std::pair<bool, Measurement1D> tk_vtx_dist = track_dist(seed_track, merged_vertices[0]);
+              }
+            }
+
+	    if (merged_vertices.size() == 1) {
+              
+              //std::cout << "check no mem out of ranges (before) : " << v[1] - vertices->begin() << std::endl;
+              *v[0] = merged_vertices[0];
+              //std::cout << "check no mem out of ranges (after) : " << v[1] - vertices->begin() << std::endl;
+
+              v[1] = vertices->erase(v[1]) - 1;
+            }
+          }
+        }
+      }
+    }
+  }
   
   //////////////////////////////////////////////////////////////////////
   // Drop tracks that "move" the vertex too much by refitting without each track.
   //////////////////////////////////////////////////////////////////////
+
+  if (max_nm1_refit_dist3 > 0 || max_nm1_refit_distz > 0) {
+    std::vector<int> refit_count(vertices->size(), 0);
+
+    int iv = 0;
+    for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0], ++iv) {
+      if (max_nm1_refit_count > 0 && refit_count[iv] >= max_nm1_refit_count)
+        continue;
+
+      const track_vec tks = vertex_track_vec(*v[0]);
+      const size_t ntks = tks.size();
+      if (ntks < 3)
+        continue;
+
+
+      std::vector<reco::TransientTrack> ttks(ntks - 1);
+      for (size_t i = 0; i < ntks; ++i) {
+        for (size_t j = 0; j < ntks; ++j)
+          if (j != i)
+            ttks[j - (j >= i)] = tt_builder.build(tks[j]);
+        reco::Vertex vnm1(TransientVertex(kv_reco.vertex(ttks)));
+        const double dist3_2 = (vnm1.x() - v[0]->x())*(vnm1.x() - v[0]->x()) + (vnm1.y() - v[0]->y())*(vnm1.y() - v[0]->y()) + (vnm1.z() - v[0]->z())*(vnm1.z() - v[0]->z());
+        const double distz = sqrt( (vnm1.z() - v[0]->z()) * (vnm1.z() - v[0]->z()) );
+
+        if (vnm1.chi2() < 0 ||
+            (max_nm1_refit_dist3 > 0 && dist3_2 > pow(max_nm1_refit_dist3, 2)) ||
+            (max_nm1_refit_distz > 0 && distz > max_nm1_refit_distz)) {
+
+          *v[0] = vnm1;
+          ++refit_count[iv];
+          --v[0], --iv;
+          break;
+        }
+      }
+    }
+    iv = 0; //some vertices after dz refiting have normalized chi2 > 5
+    for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0], ++iv) {
+       if ((*v[0]).normalizedChi2() > 5) {
+         v[0] = vertices->erase(v[0]) - 1;
+         continue;
+       }
+    }
+  }
+
 
   /////////////////////////////////////////////////////////////////////////////////////////////////////
   // Merge every pair of output vertices that satisfy the following criteria to resolve split-vertices:
@@ -498,6 +636,76 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   //   - svdist2d < 300 um
   // Note that the merged vertex must pass chi2/dof < 5
   ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  if (resolve_split_vertices_tight) {
+    reco::VertexCollection potential_merged_vertices;
+
+    for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0]) {
+
+      track_set tracks[2];
+      tracks[0] = vertex_track_set(*v[0]);
+
+      bool merge = false;
+      for (v[1] = v[0] + 1; v[1] != vertices->end(); ++v[1]) {
+        if (vertices->size() >= 2 && v[0]->nTracks() >= 2 && v[1]->nTracks() >= 2) {
+
+          tracks[1] = vertex_track_set(*v[1]);
+
+          Measurement1D v_dist = vertex_dist_2d.distance(*v[0], *v[1]);
+
+          Measurement1D dBV0_Meas1D = vertex_dist_2d.distance(*v[0], fake_bs_vtx);
+          double dBV0 = dBV0_Meas1D.value();
+
+          Measurement1D dBV1_Meas1D = vertex_dist_2d.distance(*v[1], fake_bs_vtx);
+          double dBV1 = dBV1_Meas1D.value();
+
+          double v0x = v[0]->x() - bsx;
+          double v0y = v[0]->y() - bsy;
+
+          double phi0 = atan2(v0y, v0x);
+
+          double v1x = v[1]->x() - bsx;
+          double v1y = v[1]->y() - bsy;
+
+          double phi1 = atan2(v1y, v1x);
+
+          if (fabs(reco::deltaPhi(phi0, phi1)) < 0.5 && v_dist.value() < 0.0300 && dBV0 > 0.0100 && dBV1 > 0.0100) {
+            track_set tracks_to_fit;
+            for (int i = 0; i < 2; ++i)
+              for (auto tk : tracks[i])
+                tracks_to_fit.insert(tk);
+            std::vector<reco::TransientTrack> ttks;
+            for (auto tk : tracks_to_fit)
+              ttks.push_back(seed_tracks[seed_track_ref_map[tk]]);
+
+            if (investigate_merged_vertices) {
+              std::vector<TransientVertex> tv(1, kv_reco.vertex(ttks));
+              potential_merged_vertices.push_back(reco::Vertex(tv[0]));
+              //std::cout << "ntrack in potental merged: " << potential_merged_vertices.back().nTracks() << std::endl;
+            }
+
+            reco::VertexCollection merged_vertices;
+            for (const TransientVertex& tv : kv_reco_dropin(ttks)) {
+              merged_vertices.push_back(reco::Vertex(tv));
+            }
+
+            if (merged_vertices.size() == 1 && vertex_track_set(merged_vertices[0], 0) == tracks_to_fit) {
+
+              merge = true;
+
+              v[1] = vertices->erase(v[1]) - 1; // (1) erase and point the iterator at the previous entry
+              *v[0] = reco::Vertex(merged_vertices[0]); // (2) updated v[0] (ok to use v[0] after the erase(v[1]) because v[0] is by construction before v[1])
+            }
+          }
+        }
+      }
+	  // going through all the pairs of of v[1] and a fixed v[0] for merging, if merge happens (1) each v[1] is erased (2) v[0] is updated (recurring until exit loop) (3) reset the combination again
+	  if (merge)
+		  v[0] = vertices->begin() - 1; // (3) reset the combination if a valid merge happens 
+
+    }
+  }
+
 
 
   //////////////////////////////////////////////////////////////////////
