@@ -1,0 +1,44 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2761
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww28540\viewh14380\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 cmsDriver.py Configuration/GenProduction/python/fragmentM200ctau10.py \\\
+--python_filename GENSIM-M200ctau10.py \\\
+--eventcontent RAWSIM \\\
+--customise Configuration/DataProcessing/Utils.addMonitoring \\\
+--datatier GEN-SIM --fileout file:test.root \\\
+--conditions 140X_mcRun3_2024_realistic_v20 \\\
+--beamspot Realistic25ns13p6TeVEarly2023Collision \\\
+--step GEN,SIM --geometry DB:Extended --era Run3_2024 \\\
+--no_exec --mc -n 100\
+\
+\
+\pard\pardeftab720\partightenfactor0
+
+\f1\fs26 \cf0 \expnd0\expndtw0\kerning0
+cmsDriver.py --python_filename DIGIRAWHLT.py --eventcontent PREMIXRAW \\\
+--customise Configuration/DataProcessing/Utils.addMonitoring \\\
+--datatier GEN-SIM-RAW --fileout file:GENSIMRAW.root \\\
+--pileup_input dbs:/Neutrino_E-10_gun/RunIIISummer24PrePremix-PrePremix2024Summer24PilotFixZDC14018v26_140X_mcRun3_2024_realistic_v26-v1/PREMIX \\\
+--conditions 140X_mcRun3_2024_realistic_v20 \\\
+--step DIGI,DATAMIX,L1,DIGI2RAW,HLT:2024v14 \\\
+--procModifiers premix_stage2 --nThreads 1 --geometry DB:Extended \\\
+--filein dbs:/StopStopbarTo2Dbar2D_M-200_CTau-10mm_v1_2024/brlopesd-CRAB3_MC_StopStopbarTo2Dbar2D_M-200_CTau-10mm_v1_2024-d5f78a39e1e0c44ecd9db0384b6d59c1/USER \\\
+--datamix PreMix --era Run3_2024 --no_exec --mc -n 1000\
+\
+\
+RESULTING DATASETS\
+STEP 1\
+200, 10: /StopStopbarTo2Dbar2D_M-200_CTau-10mm_v1_2024/brlopesd-CRAB3_MC_StopStopbarTo2Dbar2D_M-200_CTau-10mm_v1_2024-d5f78a39e1e0c44ecd9db0384b6d59c1/USER\
+400, 10: /StopStopbarTo2Dbar2D_M-400_CTau-10mm_v1_2024/brlopesd-CRAB3_MC_StopStopbarTo2Dbar2D_M-400_CTau-10mm_v1_2024-0ad441b1edf6b7651c0aa24954e9040a/USER\
+600, 10: /StopStopbarTo2Dbar2D_M-600_CTau-10mm_v1_2024/brlopesd-CRAB3_MC_StopStopbarTo2Dbar2D_M-600_CTau-10mm_v1_2024-b134f1b8f2d109543ad3aa6e86afac35/USER\
+800, 10: /StopStopbarTo2Dbar2D_M-800_CTau-10mm_v1_2024/brlopesd-CRAB3_MC_StopStopbarTo2Dbar2D_M-800_CTau-10mm_v1_2024-1c92250ae1f9cb993333dfb66ea89067/USER\
+\
+STEP 2\
+200, 10: /StopStopbarTo2Dbar2D_M-200_CTau-10mm_v1_2024/brlopesd-StopStopbarTo2Dbar2D_M-200_CTau-10mm_v2_2024-a294532c46346a88f497033b6f50ec0e/USER\
+400, 10: /StopStopbarTo2Dbar2D_M-400_CTau-10mm_v1_2024/brlopesd-StopStopbarTo2Dbar2D_M-400_CTau-10mm_v2_2024-a294532c46346a88f497033b6f50ec0e/USER\
+600, 10: /StopStopbarTo2Dbar2D_M-600_CTau-10mm_v1_2024/brlopesd-StopStopbarTo2Dbar2D_M-600_CTau-10mm_v2_2024-a294532c46346a88f497033b6f50ec0e/USER\
+800, 10: /StopStopbarTo2Dbar2D_M-800_CTau-10mm_v1_2024/brlopesd-StopStopbarTo2Dbar2D_M-800_CTau-10mm_v2_2024-a294532c46346a88f497033b6f50ec0e/USER}
