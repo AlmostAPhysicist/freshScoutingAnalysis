@@ -20,6 +20,7 @@
 #include <memory>
 #include <TTree.h>
 #include <TLorentzVector.h>
+#include <algorithm>
 
 // user include files
 #include "FWCore/Framework/interface/Frameworkfwd.h"
@@ -35,6 +36,12 @@
 #include "DataFormats/Common/interface/TriggerResults.h"
 #include "DataFormats/HLTReco/interface/TriggerEvent.h"
 
+#include "DataFormats/Common/interface/Handle.h"
+#include "DataFormats/TrackReco/interface/Track.h"
+#include "DataFormats/TrackReco/interface/TrackFwd.h"
+#include "DataFormats/VertexReco/interface/Vertex.h"
+#include "DataFormats/VertexReco/interface/VertexFwd.h"
+
 #include "DataFormats/Scouting/interface/Run3ScoutingElectron.h"
 #include "DataFormats/Scouting/interface/Run3ScoutingPhoton.h"
 #include "DataFormats/Scouting/interface/Run3ScoutingPFJet.h"
@@ -42,6 +49,10 @@
 #include "DataFormats/Scouting/interface/Run3ScoutingTrack.h"
 #include "DataFormats/Scouting/interface/Run3ScoutingMuon.h"
 #include "DataFormats/Scouting/interface/Run3ScoutingParticle.h"
+
+#include "RecoVertex/VertexTools/interface/VertexDistance3D.h"
+#include "RecoVertex/VertexTools/interface/VertexDistanceXY.h"
+#include "TrackingTools/IPTools/interface/IPTools.h"
 
 #include "DataFormats/PatCandidates/interface/TriggerObjectStandAlone.h"
 #include "DataFormats/PatCandidates/interface/PackedTriggerPrescales.h"
@@ -67,6 +78,7 @@
 
 class ScoutingTreeMakerRun3 : public edm::one::EDAnalyzer<edm::one::SharedResources> {
 public:
+
   explicit ScoutingTreeMakerRun3(const edm::ParameterSet&);
   ~ScoutingTreeMakerRun3() override;
 
@@ -81,24 +93,33 @@ private:
   //void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
   //void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;   
 
+  const int required_ntk;
+  
   const edm::InputTag triggerResultsTag;
   const edm::EDGetTokenT<edm::TriggerResults>             triggerResultsToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingMuon> >      muonsToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingElectron> >  electronsToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingVertex> >    primaryVerticesToken;
-  const edm::EDGetTokenT<std::vector<Run3ScoutingVertex> >    verticesToken;
+  //const edm::EDGetTokenT<std::vector<Run3ScoutingVertex> >    verticesToken;
   const edm::EDGetTokenT<double>                          rhoToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingPhoton> >  photonsToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingParticle> >  pfcandsToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingPFJet> >  pfjetsToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingTrack> >  tracksToken;
+  const edm::EDGetTokenT<std::vector<reco::Vertex> >  verticesToken;
 
+  const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
+
+  
+  
   std::vector<std::string> triggerPathsVector;
   std::map<std::string, int> triggerPathsMap;
 
   bool doL1;
   triggerExpression::Data triggerCache_;
 
+  bool l1_HTT280;
+  
   edm::InputTag                algInputTag_;
   edm::InputTag                extInputTag_;
   edm::EDGetToken              algToken_;
@@ -110,6 +131,8 @@ private:
 
   int nPFJets;
 
+  float HT;
+  
   float ptjet1;
   float ptjet2;
   float ptjet3;
@@ -123,47 +146,81 @@ private:
   float phijet1;
   float phijet2;
   float phijet3;
-  float phijet4;  
-
-  bool hasPvtx;
+  float phijet4; 
   
-  int ndvtx;
-  bool isValidVtx;
-  float vtxChi2;
-  int vtxNdof;
-  bool vtxMatch;
+  int nVertices;
+  
+  int ntk_1;
+  int ntk_2;
+  
+  float bs2derr_1;
+  float bs2derr_2;
 
-  float vtxXError;
-  float vtxYError;
-  float vtxZError;
+  float dBV_1;
+  float dBV_2;
 
-  int ntk;
-  std::vector<float> tk_vxy;
+  typedef std::set<reco::TrackRef> track_set;
+  typedef std::vector<reco::TrackRef> track_vec;
+  
+  track_set vertex_track_set(const reco::Vertex & v, const double min_weight = 0.5) const {
+    track_set result;
+    
+    for (auto it = v.tracks_begin(), ite = v.tracks_end(); it != ite; ++it) {
+      const double w = v.trackWeight(*it);
+      const bool use = w >= min_weight;
+      assert(use);
+      if (use)
+	result.insert(it->castTo<reco::TrackRef>());
+    }
+    
+    return result;
+  }
+  
+  track_vec vertex_track_vec(const reco::Vertex & v, const double min_weight = 0.5) const {
+    track_set s = vertex_track_set(v, min_weight);
+    return track_vec(s.begin(), s.end());
+  }
+
+
+  std::pair<size_t, size_t> findTwoLargestIndices(const std::vector<double>& vec) {
+    int firstIndex = -1, secondIndex = -1;
+    float firstMax = -std::numeric_limits<float>::infinity();
+    float secondMax = -std::numeric_limits<float>::infinity();
+
+    for (size_t i = 0; i < vec.size(); ++i) {
+      if (vec[i] > firstMax) {
+	secondMax = firstMax;
+	secondIndex = firstIndex;
+	firstMax = vec[i];
+	firstIndex = i;
+      } else if (vec[i] > secondMax) {
+	secondMax = vec[i];
+	secondIndex = i;
+      }
+    }
+    
+    return {firstIndex, secondIndex};
+  }
+  
 };
 
-//
-// constants, enums and typedefs
-//
-
-//
-// static data member definitions
-//
-
-//
-// constructors and destructor
-//
 ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
-    triggerResultsTag        (iConfig.getParameter<edm::InputTag>("triggerresults")),
-    triggerResultsToken      (consumes<edm::TriggerResults>                    (triggerResultsTag)),
-    muonsToken               (consumes<std::vector<Run3ScoutingMuon> >             (iConfig.getParameter<edm::InputTag>("muons"))),
-    electronsToken           (consumes<std::vector<Run3ScoutingElectron> >         (iConfig.getParameter<edm::InputTag>("electrons"))),
-    primaryVerticesToken     (consumes<std::vector<Run3ScoutingVertex> >           (iConfig.getParameter<edm::InputTag>("primaryVertices"))),
-    verticesToken            (consumes<std::vector<Run3ScoutingVertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),
-    rhoToken                 (consumes<double>                                 (iConfig.getParameter<edm::InputTag>("rho"))), 
-    photonsToken             (consumes<std::vector<Run3ScoutingPhoton> >         (iConfig.getParameter<edm::InputTag>("photons"))),
-    pfcandsToken             (consumes<std::vector<Run3ScoutingParticle> >         (iConfig.getParameter<edm::InputTag>("pfcands"))),
-    pfjetsToken              (consumes<std::vector<Run3ScoutingPFJet> >            (iConfig.getParameter<edm::InputTag>("pfjets"))),
-    tracksToken              (consumes<std::vector<Run3ScoutingTrack> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
+  required_ntk             (iConfig.getParameter<int>("required_ntk")),
+  triggerResultsTag        (iConfig.getParameter<edm::InputTag>("triggerresults")),
+  triggerResultsToken      (consumes<edm::TriggerResults>                    (triggerResultsTag)),
+  muonsToken               (consumes<std::vector<Run3ScoutingMuon> >             (iConfig.getParameter<edm::InputTag>("muons"))),
+  electronsToken           (consumes<std::vector<Run3ScoutingElectron> >         (iConfig.getParameter<edm::InputTag>("electrons"))),
+  primaryVerticesToken     (consumes<std::vector<Run3ScoutingVertex> >           (iConfig.getParameter<edm::InputTag>("primaryVertices"))),
+  //verticesToken            (consumes<std::vector<Run3ScoutingVertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),
+  rhoToken                 (consumes<double>                                 (iConfig.getParameter<edm::InputTag>("rho"))), 
+  photonsToken             (consumes<std::vector<Run3ScoutingPhoton> >         (iConfig.getParameter<edm::InputTag>("photons"))),
+  pfcandsToken             (consumes<std::vector<Run3ScoutingParticle> >         (iConfig.getParameter<edm::InputTag>("pfcands"))),
+  pfjetsToken              (consumes<std::vector<Run3ScoutingPFJet> >            (iConfig.getParameter<edm::InputTag>("pfjets"))),
+  tracksToken              (consumes<std::vector<Run3ScoutingTrack> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
+  verticesToken            (consumes<std::vector<reco::Vertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),
+  
+  beamspot_token(consumes<reco::BeamSpot>(iConfig.getParameter<edm::InputTag>("beamspot_src"))),
+  
     doL1                     (iConfig.existsAs<bool>("doL1")               ?    iConfig.getParameter<bool>  ("doL1")            : false)
 {
     usesResource("TFileService");
@@ -191,36 +248,6 @@ ScoutingTreeMakerRun3::~ScoutingTreeMakerRun3() {
 // member functions
 //
 
-// Function to find the mode of a vector 
-int findMode(const vector<int>& nums) 
-{ 
-    // Create an unordered map to store frequency of each 
-    // element 
-    unordered_map<int, int> frequency; 
-  
-    // Iterate through the vector and update frequency of 
-    // each element 
-    for (int num : nums) { 
-        frequency[num]++; 
-    } 
-  
-    // Initialize variables to keep track of mode and its 
-    // frequency 
-    int mode = 0; 
-    int maxFrequency = 0; 
-  
-    // Iterate through the unordered map and find the 
-    // element with maximum frequency 
-    for (const auto& pair : frequency) { 
-        if (pair.second > maxFrequency) { 
-            maxFrequency = pair.second; 
-            mode = pair.first; 
-        } 
-    } 
-  
-    // Return the mode 
-    return mode; 
-} 
 
 // ------------ method called for each event  ------------
 void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
@@ -228,100 +255,112 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   using namespace std;
   using namespace reco;
 
+  //Get the jets
   Handle<vector<Run3ScoutingPFJet> > pfjetsH;
   iEvent.getByToken(pfjetsToken, pfjetsH);
 
-  //Require 4 PF Jets
+  //Require 4 PF Jets 
   nPFJets = pfjetsH->size();
   if (nPFJets<4) return;
 
-  vector<int> idx;
-  int j=0;
-
-  //get the PF Jets indices
-  for (auto pfjets_iter = pfjetsH->begin(); pfjets_iter != pfjetsH->end(); ++pfjets_iter) {
-
-    idx.push_back(j);
-    j+=1;
-  }
-
-    
-  //Get the relevant variables
-  ptjet1 = pfjetsH->at(idx[0]).pt();
-  ptjet2 = pfjetsH->at(idx[1]).pt();
-  ptjet3 = pfjetsH->at(idx[2]).pt();
-  ptjet4 = pfjetsH->at(idx[3]).pt();
-  
-  etajet1 = pfjetsH->at(idx[0]).eta();
-  etajet2 = pfjetsH->at(idx[1]).eta();
-  etajet3 = pfjetsH->at(idx[2]).eta();
-  etajet4 = pfjetsH->at(idx[3]).eta();
-  
-  phijet1 = pfjetsH->at(idx[0]).phi();
-  phijet2 = pfjetsH->at(idx[1]).phi();
-  phijet3 = pfjetsH->at(idx[2]).phi();
-  phijet4 = pfjetsH->at(idx[3]).phi();
-
-  //Get the primary vertex information
-  Handle<vector<Run3ScoutingVertex> > primaryVerticesH;
-  iEvent.getByToken(primaryVerticesToken, primaryVerticesH);
-  
-  std::vector<float> vtxX;
-  std::vector<float> vtxY;
-  
-  int npvtx = 0;
-  int k = 0;
-  for (auto vtx_iter = primaryVerticesH->begin(); vtx_iter != primaryVerticesH->end(); ++vtx_iter) {
-    //std::cout<<"primary x: "<<vtx_iter->x() <<" y: "<<  vtx_iter->y()<<" ex: "<<vtx_iter->xError()<<" ey: "<<vtx_iter->yError()<<std::endl;
-    if (primaryVerticesH->at(k).isValidVtx()) {   npvtx++; }
-    k++;
-    vtxX.push_back(vtx_iter->x());   
-    vtxY.push_back(vtx_iter->y());                
-  }
-
-  hasPvtx = npvtx > 0;
-  
-  //  float avgPrimary[2];
-  //avgPrimary[0] = ( vtxX.empty() ) ? 0 : ( std::reduce(vtxX.begin(), vtxX.end(), 0.0) / vtxX.size() );
-  //avgPrimary[1] = ( vtxY.empty() ) ? 0 : ( std::reduce(vtxY.begin(), vtxY.end(), 0.0) / vtxY.size() );
-
-  //std::cout << "npvtx: " << npvtx << " avgPrimaryX: " << avgPrimary[0] << " avgPrimaryY: " << avgPrimary[1] << std::endl;
-
-  //Get info on the other vertices
-
-  //std::cout << npvtx << std::endl;
-
-  
-  Handle<vector<Run3ScoutingTrack> > tracksH;
-  iEvent.getByToken(tracksToken, tracksH);
-
+  HT = 0;
   int t = 0;
-  float tk_vx;
-  float tk_vy;
-  std::vector<int> vtx_Indices;
+  for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
+    HT = HT + pfjetsH->at(t).pt();
+    t++;
+  }
+  
+  //Get the beamspot
+  edm::Handle<reco::BeamSpot> beamspot;
+  iEvent.getByToken(beamspot_token, beamspot);
+  const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
+  
+  //Get the vertices
+  Handle<vector<Vertex> > verticesH;
+  iEvent.getByToken(verticesToken, verticesH);
 
-  ntk = 0;
-  for (auto tk_iter = tracksH->begin(); tk_iter != tracksH->end(); ++tk_iter) {
+  t=0;
+  Vertex v;
+  int ntk_t=0;
+  vector<TrackRef> tks_t;
 
-    if (tracksH->at(t).tk_vtxInd() != 0 && tracksH->at(t).tk_vtxInd() != -1) {
-      tk_vx = tracksH->at(t).tk_vx();
-      tk_vy = tracksH->at(t).tk_vy();
-      tk_vxy.push_back(sqrt(tk_vx*tk_vx + tk_vy*tk_vy));
-      
-      vtx_Indices.push_back(tracksH->at(t).tk_vtxInd());
-      ntk++;
-    }
-    
+  vector<Vertex> vertices_ntk;
+  
+  for (auto vertex_iter = verticesH->begin(); vertex_iter != verticesH->end(); ++vertex_iter) {
+    v = verticesH->at(t);
+    tks_t = vertex_track_vec(v);
+    ntk_t = tks_t.size();
+
+    if (ntk_t > required_ntk - 1) vertices_ntk.push_back(v);
+    t++;
+  }
+  
+  nVertices = vertices_ntk.size();
+
+
+  if (nVertices<2) return;
+
+
+  
+  //Two leading vertices
+  vector<double> dBVs;
+  VertexDistanceXY vertex_dist_2d;
+  t=0;
+  float dBV_t;
+  
+  for (auto vertex_iter = vertices_ntk.begin(); vertex_iter != vertices_ntk.end(); ++vertex_iter) {
+    v = vertices_ntk.at(t);
+    dBV_t = vertex_dist_2d.distance(v, fake_bs_vtx).value();
+
+    dBVs.push_back(dBV_t);
     
     t++;
-    
   }
 
+  
 
-  // std::cout << vtx_Indices.size() << std::endl;
+  auto largest_dBV = findTwoLargestIndices(dBVs);
   
-  //std::cout << tk_vxy[0] << std::endl;
+  Vertex v1 = vertices_ntk.at(largest_dBV.first);
+  Vertex v2 = vertices_ntk.at(largest_dBV.second);
+
+  //Get the jets distributions
+  ptjet1 = pfjetsH->at(0).pt();
+  ptjet2 = pfjetsH->at(1).pt();
+  ptjet3 = pfjetsH->at(2).pt();
+  ptjet4 = pfjetsH->at(3).pt();
   
+  etajet1 = pfjetsH->at(0).eta();
+  etajet2 = pfjetsH->at(1).eta();
+  etajet3 = pfjetsH->at(2).eta();
+  etajet4 = pfjetsH->at(3).eta();
+  
+  phijet1 = pfjetsH->at(0).phi();
+  phijet2 = pfjetsH->at(1).phi();
+  phijet3 = pfjetsH->at(2).phi();
+  phijet4 = pfjetsH->at(3).phi();
+  
+  //Calculate the vertex distributions
+  
+  Measurement1D dBV_Meas1D_1 = vertex_dist_2d.distance(v1, fake_bs_vtx);
+  Measurement1D dBV_Meas1D_2 = vertex_dist_2d.distance(v2, fake_bs_vtx);
+  
+  dBV_1 = dBV_Meas1D_1.value();
+  bs2derr_1 = dBV_Meas1D_1.error();
+
+  dBV_2 = dBV_Meas1D_2.value();
+  bs2derr_2 = dBV_Meas1D_2.error();
+
+  //printf("First dBV = %f, second dBV = %f\n", dBV_1, dBV_2);
+
+  vector<TrackRef> tks_1 = vertex_track_vec(v1);
+  ntk_1 = tks_1.size();
+
+  vector<TrackRef> tks_2 = vertex_track_vec(v2);
+  ntk_2 = tks_2.size();
+
+  
+  //L1 results
   l1Result_.clear();
   if (doL1) {
     l1GtUtils_->retrieveL1(iEvent,iSetup,algToken_);
@@ -330,11 +369,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       l1GtUtils_->getFinalDecisionByName(string(l1Seeds_[iseed]), l1htbit);
       l1Result_.push_back( l1htbit );
     }
+    l1GtUtils_->getFinalDecisionByName(string("L1_HTT280er"), l1_HTT280);
   }
-    
-  //Tests about the jets
-    
-    
+  
   tree->Fill();
     
 }
@@ -361,17 +398,22 @@ void ScoutingTreeMakerRun3::beginJob() {
     tree->Branch("phijet3"             , &phijet3                     , "phijet3/F"     );
     tree->Branch("phijet4"             , &phijet4                     , "phijet4/F"     );
 
-    //tree->Branch("npvtx"               , &npvtx                       , "npvtx/I"       );
+    //Add the missing distributions
+    tree->Branch("dBV_1"               , &dBV_1                       , "dBV_1/F"       );
+    tree->Branch("dBV_2"               , &dBV_2                       , "dBV_2/F"       );
+
+    tree->Branch("bs2derr_1"           , &bs2derr_1                   , "bs2derr_1/F"   );
+    tree->Branch("bs2derr_2"           , &bs2derr_2                   , "bs2derr_2/F"   );
     
-    //tree->Branch("Lxy"                 , &Lxy                         , "Lxy/F"         );
-    //tree->Branch("LxyErr"              , &LxyErr                      , "LxyErr/F"      );
-    //tree->Branch("LxySig"              , &LxySig                      , "LxySig/F"      );
+    tree->Branch("ntk_1"               , &ntk_1                       , "ntk_1/I"       );
+    tree->Branch("ntk_2"               , &ntk_2                       , "ntk_2/I"       );
 
-
-    tree->Branch("ntk"               , &ntk                       , "ntk/I"       );
-    tree->Branch("tk_vxy",   "std::vector<float>"            ,&tk_vxy);
+    tree->Branch("nVertices"               , &nVertices                       , "nVertices/I"       );
+    
+    tree->Branch("HT"                  , &HT                          , "HT/F"          );
     
     tree->Branch("l1Result", "std::vector<bool>"             ,&l1Result_, 32000, 0  );
+    tree->Branch("l1_HTT280"           , &l1_HTT280                   , "l1_HTT280/O"  );
 }
 
 // ------------ method called once each job just after ending the event loop  ------------

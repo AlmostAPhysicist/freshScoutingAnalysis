@@ -1,16 +1,16 @@
 import FWCore.ParameterSet.Config as cms
 
-process = cms.Process("TESTVERTEX")
+process = cms.Process("VertexProducer")
 
 process.load("FWCore.MessageService.MessageLogger_cfi")
 #process.options = cms.untracked.PSet(
 #    wantSummary = cms.untracked.bool(True)
 #)
 
-process.MessageLogger.cerr.FwkSummary.reportEvery = 1
-process.MessageLogger.cerr.FwkReport.reportEvery = 1
+process.MessageLogger.cerr.FwkSummary.reportEvery = 100
+process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(10) ) #10 events to debug
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
 
 process.source = cms.Source("PoolSource",
     # Test file generated on CMSSW 13.3.0
@@ -66,7 +66,6 @@ process.Vertexer = cms.EDProducer('Vertexer',
 # Save only the scouting collections on the output file
 process.out = cms.OutputModule("PoolOutputModule",
     fileName = cms.untracked.string('vertexer_test.root'),
-    #outputCommands = cms.untracked.vstring('drop *', 'keep *_hltGtStage2ObjectMap_*_*', 'keep *_TriggerResults_*_*', 'keep *_hltScouting*_*_*')
 )
 
 # Usually it is better to put producers on a task instead of a path

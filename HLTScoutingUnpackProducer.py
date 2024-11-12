@@ -1,20 +1,20 @@
 import FWCore.ParameterSet.Config as cms
 
-process = cms.Process("SKIM")
+process = cms.Process("TrackProducer")
 
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.options = cms.untracked.PSet(
     wantSummary = cms.untracked.bool(True)
 )
-process.MessageLogger.cerr.FwkSummary.reportEvery = 1000
-process.MessageLogger.cerr.FwkReport.reportEvery = 1000
+process.MessageLogger.cerr.FwkSummary.reportEvery = 100
+process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(2000) )
 
 process.source = cms.Source("PoolSource",
     # Test file generated on CMSSW 13.3.0
-    fileNames = cms.untracked.vstring( 
-        '/store/user/brlopesd/StopStopbarTo2Dbar2D_M-200_CTau-10mm_v1/StopStopbarTo2Dbar2D_M-200_CTau-10mm_v1/240730_165552/0000/GENSIMRAW_3.root'
+    fileNames = cms.untracked.vstring( #add test file here
+
     )
 )
 
@@ -34,7 +34,7 @@ process.hltScoutingUnpackProducer = cms.EDProducer('HLTScoutingUnpackProducer',
 # Save only the scouting collections on the output file
 process.out = cms.OutputModule("PoolOutputModule",
     fileName = cms.untracked.string('scout_test.root'),
-    outputCommands = cms.untracked.vstring('drop *', 'keep *_hltGtStage2ObjectMap_*_*', 'keep *_TriggerResults_*_*', 'keep *_hltScouting*_*_*')
+    outputCommands = cms.untracked.vstring('drop *', 'keep *_hltGtStage2ObjectMap_*_*', 'keep *_TriggerResults_*_*', 'keep *_hltFEDSelectorL1_*_*', 'keep *_hltScouting*_*_*')
 )
 
 # Usually it is better to put producers on a task instead of a path
