@@ -71,7 +71,8 @@ public:
   ~Vertexer() override;
 
   explicit Vertexer(edm::ParameterSet const& params);
-  //static void fillDescriptions(edm::ConfigurationDescriptions& descriptions);
+
+  
 
 private:
   typedef std::set<reco::TrackRef> track_set;
@@ -100,6 +101,7 @@ private:
   const double max_nm1_refit_distz;
   const int max_nm1_refit_count;
   const bool investigate_merged_vertices;
+  const bool verbose;
 
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::Track>> seed_tracks_token_;
@@ -107,19 +109,8 @@ private:
 
   edm::EDPutTokenT<reco::VertexCollection> putToken_;
 
-  //void beginRun(edm::Run const&, edm::EventSetup const&) override;
-  //void endRun(edm::Run const&, edm::EventSetup const&) override;
-  //void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
-  //void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
-
   // ----------member data ---------------------------
 
-  /*//Will get the beamspot from the GT later. For now, set it =0 to test
-  float bsx = 0;
-  float bsy = 0;
-  float bsz = 0;
-  */
-  
   VertexDistanceXY vertex_dist_2d;
   VertexDistance3D vertex_dist_3d;
 
@@ -152,7 +143,6 @@ private:
         const double w = v.trackWeight(*it);
         const bool use = w >= min_weight;
         assert(use);
-        //if (verbose) ("trk #%2i pt %6.3f eta %6.3f phi %6.3f dxy %6.3f dz %6.3f w %5.3f  use? %i\n", int(it-v.tracks_begin()), (*it)->pt(), (*it)->eta(), (*it)->phi(), (*it)->dxy(), (*it)->dz(), w, use);
         if (use)
           result.insert(it->castTo<reco::TrackRef>());
       }
@@ -160,25 +150,37 @@ private:
       return result;
     }
 
-  /* //Returns an empty track_set to test the function above
-  track_set vertex_track_set(const reco::Vertex & v, const double min_weight = 0.5) {
-    track_set result;
-    return result; }
-  */
   
   
-  std::pair<bool, Measurement1D> track_dist(const reco::TransientTrack & t, const reco::Vertex & v) const {
+  std::pair<bool, Measurement1D> track_dist(const reco::TransientTrack& t, const reco::Vertex & v) const {
     if (use_2d_track_dist)
       return IPTools::absoluteTransverseImpactParameter(t, v);
     else
       return IPTools::absoluteImpactParameter3D(t, v);
   }
-  
+
   track_vec vertex_track_vec(const reco::Vertex & v, const double min_weight = 0.5) const {
     track_set s = vertex_track_set(v, min_weight);
     return track_vec(s.begin(), s.end());
   }
 
+  template <typename T>
+  void print_track_set(const T& ts) const {
+    for (auto r : ts)
+      printf(" %u", r.key());
+  }
+  
+  template <typename T>
+  void print_track_set(const T & ts, const reco::Vertex & v) const {
+    for (auto r : ts)
+      printf(" %u%s", r.key(), (v.trackWeight(r) < 0.5 ? "!" : ""));
+  }
+  
+  void print_track_set(const reco::Vertex & v) const {
+    for (auto r = v.tracks_begin(), re = v.tracks_end(); r != re; ++r)
+      printf(" %lu%s", r->key(), (v.trackWeight(*r) < 0.5 ? "!" : ""));
+  }
+  
   
 };
 
@@ -215,11 +217,14 @@ Vertexer::Vertexer(edm::ParameterSet const& params)
   max_nm1_refit_distz(params.getParameter<double>("max_nm1_refit_distz")),
   max_nm1_refit_count(params.getParameter<int>("max_nm1_refit_count")),
   investigate_merged_vertices(params.getParameter<bool>("investigate_merged_vertices")),
-
+  verbose(params.getParameter<bool>("verbose")),
+  
   beamspot_token(consumes<reco::BeamSpot>(params.getParameter<edm::InputTag>("beamspot_src"))),
   seed_tracks_token_(consumes(params.getParameter<edm::InputTag>("seed_tracks_src"))),
   token_builder(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
+
   putToken_{produces()} {}
+
 
 Vertexer::~Vertexer() {}
 
@@ -241,14 +246,17 @@ std::vector<TransientVertex> kv_reco_dropin(std::vector<reco::TransientTrack> & 
 // ------------ method called to produce the data  ------------
 void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
+  //////////////////////////////////////////////////////////////////////                                                                              
+  // DataFormats setup and track preselection                                                                                
+  ////////////////////////////////////////////////////////////////////// 
+  
   edm::Handle<reco::BeamSpot> beamspot;
   iEvent.getByToken(beamspot_token, beamspot);
   const double bsx = beamspot->position().x();
   const double bsy = beamspot->position().y();
-  //const double bsz = beamspot->position().z();
+  const double bsz = beamspot->position().z();
   const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
   
-  //printf("started the producer");
   //Get the Transient Track Builder
   auto const &tt_builder = iSetup.getData(token_builder);
 
@@ -256,28 +264,27 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   edm::Handle<std::vector<reco::Track>> seed_track_handle;
   iEvent.getByToken(seed_tracks_token_, seed_track_handle);
 
-
+  // Build the references to the tracks
   std::vector<reco::TrackRef> seed_track_refs;
   
   for (size_t i_tk = 0; i_tk < seed_track_handle->size(); i_tk++){
     const edm::Ref<reco::TrackCollection> tk_ref(seed_track_handle, i_tk);
-    seed_track_refs.push_back(tk_ref);
+    reco::TransientTrack ttk = tt_builder.build(tk_ref);
+    std::pair<bool, Measurement1D> ttk_dist = track_dist(ttk, fake_bs_vtx);
+    float IP_sig = ttk_dist.second.significance();
+    if (IP_sig > 4) seed_track_refs.push_back(tk_ref);
+    if (verbose) printf("Build track references. IP_sig = %f\n", IP_sig);
   }
   
-  //  const edm::Ref<reco::Track> leadingTrackRef(seed_track_refs, 0);
-
+  
   //Build transient tracks from reco tracks
   std::vector<reco::TransientTrack> seed_tracks;
 
-   
-  //Former map from tracks to the number of seed tracks
   std::map<reco::TrackRef, size_t> seed_track_ref_map;
   for (const reco::TrackRef& tk : seed_track_refs) {
     seed_tracks.push_back(tt_builder.build(tk));
     seed_track_ref_map[tk] = seed_tracks.size() - 1;
   }
-  
-  //const size_t seed_track_ref_map[tk] = seed_tracks.size() - 1;
   
 
   //////////////////////////////////////////////////////////////////////
@@ -294,7 +301,6 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     return;
   }  
 
-  //printf("n_seed_tracks: %5lu\n", ntk);
 
   std::vector<size_t> itks(n_tracks_per_seed_vertex, 0);
 
@@ -306,6 +312,24 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     TransientVertex seed_vertex = kv_reco.vertex(ttks);
     if (seed_vertex.isValid() && seed_vertex.normalisedChiSquared() < max_seed_vertex_chi2) { 
       vertices->push_back(reco::Vertex(seed_vertex));
+
+      if (verbose) {
+        const reco::Vertex& v = vertices->back();
+        const double vchi2 = v.normalizedChi2();
+        const double vndof = v.ndof();
+        const double vx = v.position().x() - bsx;
+        const double vy = v.position().y() - bsy;
+        const double vz = v.position().z() - bsz;
+        const double phi = atan2(vy, vx);
+        const double rho = sqrt(vx*vx + vy*vy);
+        const double r = sqrt(vx*vx + vy*vy + vz*vz);
+
+	printf("from tracks");
+	for (auto itk : itks)
+	  printf(" %lu", itk);
+	printf(": vertex #%3lu: chi2/dof: %7.3f dof: %7.3f pos: <%7.3f, %7.3f, %7.3f>  rho: %7.3f  phi: %7.3f  r: %7.3f\n", vertices->size() - 1, vchi2, vndof, vx, vy, vz, rho, phi, r);
+      
+      }
     }
   };
 
@@ -344,18 +368,16 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   int n_onetracks = 0;
   std::vector<reco::Vertex>::iterator v[2];
 
-  //size_t ivtx[2];
-  //int vertices_loop_limit = 0;
+  size_t ivtx[2];
+  
   for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0]) {
-    //vertices_loop_limit++;
-    //if (vertices_loop_limit > 5000) continue;
-
-    //printf("loop over vertices \n");
     track_set tracks[2];
-    //ivtx[0] = v[0] - vertices->begin();
+    ivtx[0] = v[0] - vertices->begin();
     tracks[0] = vertex_track_set(*v[0]);
     
     if (tracks[0].size() < 2) {
+      if (verbose)
+        printf("track-sharing: vertex-0 #%lu is down to one track, junking it\n", ivtx[0]);
       v[0] = vertices->erase(v[0]) - 1;
       ++n_onetracks;
       continue;
@@ -367,17 +389,31 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     track_set tracks_to_remove_in_refit[2];
     
     for (v[1] = v[0] + 1; v[1] != vertices->end(); ++v[1]) {
-      //ivtx[1] = v[1] - vertices->begin();
+      ivtx[1] = v[1] - vertices->begin();
       tracks[1] = vertex_track_set(*v[1]);
 
       if (tracks[1].size() < 2) {
+        if (verbose)
+          printf("track-sharing: vertex-1 #%lu is down to one track, junking it\n", ivtx[1]);	
 	v[1] = vertices->erase(v[1]) - 1;
         ++n_onetracks;
         continue;
       }
 
+
+      
+      if (verbose) {
+        printf("track-sharing: # vertices = %lu. considering vertices #%lu (chi2/dof %.3f, track set", vertices->size(), ivtx[0], v[0]->chi2() / v[0]->ndof());
+        print_track_set(tracks[0], *v[0]);
+        printf(") and #%lu (chi2/dof %.3f, track set", ivtx[1], v[1]->chi2() / v[1]->ndof());
+        print_track_set(tracks[1], *v[1]);
+        printf("):\n");
+      }
+
       
       if (is_track_subset(tracks[0], tracks[1])) {
+	if (verbose)
+          printf("   subset/duplicate vertices %lu and %lu, erasing second and starting over\n", ivtx[0], ivtx[1]);
         duplicate = true;
         break;
       }
@@ -387,13 +423,27 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
         if (tracks[1].count(tk) > 0)
           shared_tracks.push_back(tk);
 
+      if (verbose) {
+        if (shared_tracks.size()) {
+          printf("   shared tracks are: ");
+          print_track_set(shared_tracks);
+          printf("\n");
+        }
+        else
+          printf("   no shared tracks\n");
+      }
+
+      
       if (shared_tracks.size() > 0){
 	Measurement1D v_dist = vertex_dist(*v[0], *v[1]);
 	
-	//printf("vertex dist = %f, vertex sig = %f\n", v_dist.value(), v_dist.significance());
+        if (verbose)
+          printf("   vertex dist (2d? %i) %7.3f  sig %7.3f\n", use_2d_vertex_dist, v_dist.value(), v_dist.significance());
 	
-	if (v_dist.value() < merge_shared_dist || v_dist.significance() < merge_shared_sig)
+	if (v_dist.value() < merge_shared_dist || v_dist.significance() < merge_shared_sig) {
+          if (verbose) printf("          dist < %7.3f || sig < %7.3f, will try using merge result first before arbitration\n", merge_shared_dist, merge_shared_sig);
 	  merge = true;
+      }
 	else
 	  refit = true;
 	
@@ -503,8 +553,8 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
       v[0] = vertices->begin() - 1;  // -1 because about to ++sv
       ++n_resets;
       
-      if (n_resets == 3000)
-        throw "I'm dumb";
+      //if (n_resets == 3000)
+      //  throw "I'm dumb";
     }
   }
 
