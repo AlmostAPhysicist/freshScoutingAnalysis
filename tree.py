@@ -4,8 +4,8 @@ process = cms.Process("TREE")
 
 process.load("FWCore.MessageService.MessageLogger_cfi")
 
-process.MessageLogger.cerr.FwkSummary.reportEvery = 1
-process.MessageLogger.cerr.FwkReport.reportEvery = 1
+process.MessageLogger.cerr.FwkSummary.reportEvery = 100
+process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
 process.maxEvents = cms.untracked.PSet(
     input = cms.untracked.int32(-1)
@@ -35,6 +35,7 @@ L1Info = ["L1_HTT200er", "L1_HTT255er", "L1_HTT280er", "L1_HTT320er", "L1_HTT360
 
 #For CMSSW 13.3.0, the muon tag is hltScoutingMuonPacker, whilst for 14X it's hltScoutingMuonPackerNoVtx
 process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
+                                      required_ntk     = cms.int32(2),
                                       triggerresults   = cms.InputTag("TriggerResults", "", "HLT"),
                                       ReadPrescalesFromFile = cms.bool( False ),
                                       AlgInputTag       = cms.InputTag("gtStage2Digis"),
@@ -54,6 +55,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       pfMetPhi          = cms.InputTag("hltScoutingPFPacker","pfMetPhi"),
                                       rho               = cms.InputTag("hltScoutingPFPacker","rho"),
                                       beamspot_src = cms.InputTag('offlineBeamSpot'),
+                                      genParticle_src = cms.InputTag('genParticles',''),
                                   )
 
 process.p = cms.Path(process.gtStage2Digis+process.scoutingTree)

@@ -21,6 +21,7 @@
 #include <TTree.h>
 #include <TLorentzVector.h>
 #include <algorithm>
+#include "TMath.h"
 
 // user include files
 #include "FWCore/Framework/interface/Frameworkfwd.h"
@@ -41,6 +42,8 @@
 #include "DataFormats/TrackReco/interface/TrackFwd.h"
 #include "DataFormats/VertexReco/interface/Vertex.h"
 #include "DataFormats/VertexReco/interface/VertexFwd.h"
+#include "SimDataFormats/TrackingAnalysis/interface/TrackingParticle.h"
+#include "SimDataFormats/TrackingAnalysis/interface/TrackingVertex.h"
 
 #include "DataFormats/Scouting/interface/Run3ScoutingElectron.h"
 #include "DataFormats/Scouting/interface/Run3ScoutingPhoton.h"
@@ -88,7 +91,7 @@ private:
   void beginJob() override;
   void analyze(const edm::Event&, const edm::EventSetup&) override;
   void endJob() override;
-    //void beginRun(edm::Run const&, edm::EventSetup const&) override;
+  //void beginRun(edm::Run const&, edm::EventSetup const&) override;
   //void endRun(edm::Run const&, edm::EventSetup const&) override;
   //void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
   //void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;   
@@ -109,7 +112,7 @@ private:
   const edm::EDGetTokenT<std::vector<reco::Vertex> >  verticesToken;
 
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
-
+  const edm::EDGetTokenT<std::vector<reco::GenParticle>> GenParticleToken_;
   
   
   std::vector<std::string> triggerPathsVector;
@@ -159,8 +162,62 @@ private:
   float dBV_1;
   float dBV_2;
 
+  float genVert_x = -999;
+  float genVert_y = -999;
+  float genVert_z = -999;
+  float genVert_dBV = -999;
+  float genVert_3d = -999;
+  float genVert_motherEta = -999;
+  float genVert_motherPhi = -999;
+  float genVert_motherPt = -999;
+  float genVert_motherDistTraveled = -999;
+  float genVert_dVV = -999;
+  float genVert_dPhi = -999;
+  
   typedef std::set<reco::TrackRef> track_set;
   typedef std::vector<reco::TrackRef> track_vec;
+
+  bool isStopDecay(const reco::Candidate* part){
+    if(fabs(part->pdgId())==1000006 && part->numberOfDaughters()==2){
+      int daughterId = part->daughter(0)->pdgId();
+      bool sameDaughters = (daughterId==part->daughter(1)->pdgId());
+      if(sameDaughters && fabs(daughterId)==1){
+	return true;
+      }
+    }
+    return false;
+  }
+
+  bool isStopDecay(std::vector<reco::GenParticle>::const_iterator part){
+    if(fabs(part->pdgId())==1000006 && part->numberOfDaughters()==2){
+      int daughterId = part->daughter(0)->pdgId();
+      bool sameDaughters = (daughterId==part->daughter(1)->pdgId());
+      if(sameDaughters && fabs(daughterId)==1){
+	return true;
+      }
+    }
+    return false;
+  }
+
+  const reco::Candidate* getFinalCopy(std::vector<reco::GenParticle>::const_iterator part){
+    const reco::Candidate* candidate = part->clone();
+    if(part->numberOfDaughters()==0) return candidate;
+    bool foundLast = false;
+    while(!foundLast){
+      int selfIndex = -1;
+      for(uint i=0; i<candidate->numberOfDaughters(); i++){
+	if(candidate->daughter(i)->pdgId()==candidate->pdgId()) selfIndex = i;
+      }
+      if(selfIndex==-1){
+	foundLast=true;
+      }
+      else{
+	candidate = candidate->daughter(selfIndex);
+      }
+    }
+    return candidate;
+    
+  }
   
   track_set vertex_track_set(const reco::Vertex & v, const double min_weight = 0.5) const {
     track_set result;
@@ -220,6 +277,7 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   verticesToken            (consumes<std::vector<reco::Vertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),
   
   beamspot_token(consumes<reco::BeamSpot>(iConfig.getParameter<edm::InputTag>("beamspot_src"))),
+  GenParticleToken_(consumes(iConfig.getParameter<edm::InputTag>("genParticle_src"))),
   
     doL1                     (iConfig.existsAs<bool>("doL1")               ?    iConfig.getParameter<bool>  ("doL1")            : false)
 {
@@ -254,7 +312,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   using namespace edm;
   using namespace std;
   using namespace reco;
-
+  
   //Get the jets
   Handle<vector<Run3ScoutingPFJet> > pfjetsH;
   iEvent.getByToken(pfjetsToken, pfjetsH);
@@ -274,6 +332,52 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   edm::Handle<reco::BeamSpot> beamspot;
   iEvent.getByToken(beamspot_token, beamspot);
   const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
+
+  //Get gen particles for truth-level vertices
+  edm::Handle<std::vector<reco::GenParticle>> genParticle_handle;
+  iEvent.getByToken(GenParticleToken_,genParticle_handle);
+  std::vector<GlobalPoint> genVertices;
+  
+  std::vector<reco::GenParticle>::const_iterator genParticleIter;
+  float maxDist = 0;
+  for(genParticleIter = genParticle_handle->begin(); genParticleIter != genParticle_handle->end(); ++genParticleIter){
+    if(genParticleIter->numberOfMothers()<1) continue;
+    if(isStopDecay(genParticleIter->mother(0))){
+      //std::cout<<"pdgid: "<<genParticleIter->pdgId()<<" vertex xyz: "<<genParticleIter->vx()<<" "<<genParticleIter->vy()<<" "<<genParticleIter->vz()<<" status: "<<genParticleIter->status()<<" parent id: "<<genParticleIter->mother(0)->pdgId()<<" parent vertex: "<<genParticleIter->mother(0)->vx()<<" "<<genParticleIter->mother(0)->vy()<<" "<<genParticleIter->mother(0)->vz()<<" parent status: "<<genParticleIter->mother(0)->status()<<std::endl;
+      float dist = TMath::Sqrt(pow(genParticleIter->vx()-beamspot->x0(),2)+pow(genParticleIter->vy()-beamspot->y0(),2));
+      const reco::Candidate* mother = genParticleIter->mother(0);
+      while(mother->mother(0)->pdgId()==mother->pdgId()){
+	mother = mother->mother(0);
+      }
+
+      bool isDupe = false;
+      GlobalPoint genVertex = GlobalPoint(genParticleIter->vx(),genParticleIter->vy(),genParticleIter->vz());
+      for(auto vertex: genVertices){
+	if((vertex.x()==genVertex.x()) && (vertex.y()==genVertex.y()) && (vertex.z()==genVertex.z())) isDupe = true;
+      }
+      if(!isDupe) genVertices.push_back(genVertex);
+      //std::cout<<"first mother id: "<<mother->pdgId()<<" status: "<<mother->status()<<" vertex: "<<mother->vx()<<" "<<mother->vy()<<" "<<mother->vz()<<" parent id: "<<mother->mother(0)->pdgId()<<" parent status: "<<mother->mother(0)->status()<<" mother vertex: "<<mother->mother(0)->vx()<<" "<<mother->mother(0)->vy()<<" "<<mother->mother(0)->vz()<<std::endl;
+      if(dist>maxDist){
+	maxDist = dist;
+	genVert_x = genParticleIter->vx();
+	genVert_y = genParticleIter->vy();
+	genVert_z = genParticleIter->vz();
+	genVert_dBV = dist;
+	genVert_3d = TMath::Sqrt(pow(genParticleIter->vx()-beamspot->x0(),2)+pow(genParticleIter->vy()-beamspot->y0(),2)+pow(genParticleIter->vz()-beamspot->z0(),2));
+	genVert_motherEta = mother->eta();
+	genVert_motherPhi = mother->phi();
+	genVert_motherPt = mother->pt();
+	genVert_motherDistTraveled = TMath::Sqrt(pow(genParticleIter->vx()-mother->mother(0)->vx(),2)+pow(genParticleIter->vy()-mother->mother(0)->vy(),2)+pow(genParticleIter->vz()-mother->mother(0)->vz(),2));
+      }
+    } //isStopDecay
+  } //loop over gen particles
+
+  if(genVertices.size()==2){
+    genVert_dVV = TMath::Sqrt(pow(genVertices[0].x()-genVertices[1].x(),2)+pow(genVertices[0].y()-genVertices[1].y(),2)+pow(genVertices[0].z()-genVertices[1].z(),2));
+    float dPhi = fabs(atan2(genVertices[0].y(),genVertices[0].x())-atan2(genVertices[1].y(),genVertices[1].x()));
+    if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
+    genVert_dPhi = dPhi;
+  }
   
   //Get the vertices
   Handle<vector<Vertex> > verticesH;
@@ -296,11 +400,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   }
   
   nVertices = vertices_ntk.size();
-
-
+  
   if (nVertices<2) return;
-
-
   
   //Two leading vertices
   vector<double> dBVs;
@@ -414,6 +515,17 @@ void ScoutingTreeMakerRun3::beginJob() {
     
     tree->Branch("l1Result", "std::vector<bool>"             ,&l1Result_, 32000, 0  );
     tree->Branch("l1_HTT280"           , &l1_HTT280                   , "l1_HTT280/O"  );
+    tree->Branch("genVert_x_1"              , &genVert_x                      , "genVert_x_1/F"      );
+    tree->Branch("genVert_y_1"              , &genVert_y                      , "genVert_y_1/F"      );
+    tree->Branch("genVert_z_1"              , &genVert_z                      , "genVert_z_1/F"      );
+    tree->Branch("genVert_dBV_1"              , &genVert_dBV                      , "genVert_dBV_1/F"      );
+    tree->Branch("genVert_3d_1"              , &genVert_3d                      , "genVert_3d_1/F"      );
+    tree->Branch("genVert_motherEta_1"       , &genVert_motherEta               , "genVert_motherEta_1/F"      );
+    tree->Branch("genVert_motherPhi_1"       , &genVert_motherPhi               , "genVert_motherPhi_1/F"      );
+    tree->Branch("genVert_motherPt_1"       , &genVert_motherPt               , "genVert_motherPt_1/F"      );
+    tree->Branch("genVert_motherDistTraveled_1"       , &genVert_motherDistTraveled               , "genVert_motherDistTraveled_1/F"      );
+    tree->Branch("genVert_dVV_1"              , &genVert_dVV                      , "genVert_dVV_1/F"      );
+    tree->Branch("genVert_dPhi_1"              , &genVert_dPhi                      , "genVert_dPhi_1/F"      );
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
