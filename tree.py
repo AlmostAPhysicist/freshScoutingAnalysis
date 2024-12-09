@@ -56,6 +56,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       rho               = cms.InputTag("hltScoutingPFPacker","rho"),
                                       beamspot_src = cms.InputTag('offlineBeamSpot'),
                                       genParticle_src = cms.InputTag('genParticles',''),
+                                      trackingParticle_src = cms.InputTag('prunedTrackingParticles','')
                                   )
 
 process.p = cms.Path(process.gtStage2Digis+process.scoutingTree)
