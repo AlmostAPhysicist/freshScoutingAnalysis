@@ -69,7 +69,7 @@
 
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h" 
-
+#include "TH2.h"
 //
 // class declaration
 //
@@ -175,6 +175,7 @@ private:
   float genVert_dVV = -999;
   float genVert_dPhi = -999;
   int genScout_nMatches = -999;
+  int genScoutVert_nMatches = -999;
 
   std::vector<float>* match_ptRatio;
   std::vector<float>* match_deltaR;
@@ -184,39 +185,46 @@ private:
 
   TH1F* h_match_gen_dxy = new TH1F("match_gen_dxy",";Gen particle d_{xy} [cm]; Gen particles / 0.01 cm", 100, 0, 1);
   TH1F* h_gen_dxy = new TH1F("gen_dxy",";Gen particle d_{xy} [cm]; Gen particles / 0.01 cm", 100, 0, 1);
+  TH2F* h_match_vert_x_y = new TH2F("match_vert_x_y","Vertex Position; X Position [cm] / 0.02 cm; Y Position [cm] / 0.02 cm", 100, -1, 1, 100, -1, 1);
+  TH2F* h_match_genVert_x_y = new TH2F("match_genVert_x_y","Gen Vertex Position; X Position [cm] / 0.02 cm; Y Position [cm] / 0.02 cm", 100, -1, 1, 100, -1, 1);
+  TH1F* h_match_genVert_dBV = new TH1F("match_genVert_dBV",";Gen Vertex d_{BV} [cm]; Gen Vertices / 0.01 cm", 100, 0, 1);
+  TH1F* h_genVert_dBV = new TH1F("genVert_dBV",";Gen Vertex d_{BV} [cm]; Gen Vertices / 0.01 cm", 100, 0, 1);
+  TH1F* h_resVert_x = new TH1F("resVert_x",";Gen X Position - Scout X Position [cm]; Gen Vertices / 0.02 cm", 100, -1, 1);
+  TH1F* h_resVert_y = new TH1F("resVert_y",";Gen Y Position - Scout Y Position [cm]; Gen Vertices / 0.02 cm", 100, -1, 1);
+  TH1F* h_resVert_z = new TH1F("resVert_z",";Gen Z Position - Scout Z Position [cm]; Gen Vertices / 0.02 cm", 100, -1, 1);
   
   typedef std::set<reco::TrackRef> track_set;
   typedef std::vector<reco::TrackRef> track_vec;
 
   static bool CompareDeltaR(std::vector<float> a, std::vector<float> b) { return a[2] < b[2]; }
   
-  bool isStopDecay(const reco::Candidate* part){
+  std::pair<bool,GlobalPoint> isStopDecay(const reco::Candidate* part){
     if(fabs(part->pdgId())==1000006 && part->numberOfDaughters()==2){
       int daughterId = part->daughter(0)->pdgId();
       bool sameDaughters = (daughterId==part->daughter(1)->pdgId());
       if(sameDaughters && fabs(daughterId)==1){
-	return true;
+	return std::make_pair(true, GlobalPoint(part->daughter(0)->vx(),part->daughter(0)->vy(),part->daughter(0)->vz()));
       }
     }
-    return false;
+    return std::make_pair(false, GlobalPoint(-999,-999,-999));
   }
 
-  bool isStopDecay(std::vector<reco::GenParticle>::const_iterator part){
+  std::pair<bool,GlobalPoint> isStopDecay(std::vector<reco::GenParticle>::const_iterator part){
     if(fabs(part->pdgId())==1000006 && part->numberOfDaughters()==2){
       int daughterId = part->daughter(0)->pdgId();
       bool sameDaughters = (daughterId==part->daughter(1)->pdgId());
       if(sameDaughters && fabs(daughterId)==1){
-	return true;
+	return std::make_pair(true, GlobalPoint(part->daughter(0)->vx(),part->daughter(0)->vy(),part->daughter(0)->vz()));
       }
     }
-    return false;
+    return std::make_pair(false, GlobalPoint(-999,-999,-999));
   }
 
-  bool isChargedStopDecayProductStatusOne(std::vector<reco::GenParticle>::const_iterator part){
-    if(part->status()!=1 || part->charge()==0 || part->numberOfMothers()==0) return false;
+  std::pair<bool,GlobalPoint> isChargedStopDecayProductStatusOne(std::vector<reco::GenParticle>::const_iterator part){
+    if(part->status()!=1 || part->charge()==0 || part->numberOfMothers()==0) return std::make_pair(false,GlobalPoint(-999,-999,-999));
     const reco::Candidate* candidate = part->mother(0);
-    bool isStopProduct = false;
-    while(!isStopProduct){
+    std::pair<bool,GlobalPoint> isStopProduct = std::make_pair(false,GlobalPoint(-999,-999,-999));
+    while(!isStopProduct.first){
       isStopProduct = isStopDecay(candidate);
       if(candidate->numberOfMothers()==0) break;
       candidate = candidate->mother(0);
@@ -282,6 +290,16 @@ private:
     }
     
     return {firstIndex, secondIndex};
+  }
+
+  void removeFlows(TH1F* h) {
+    int nbins = h->GetNbinsX();
+    double underflow = h->GetBinContent(0);
+    double overflow = h->GetBinContent(nbins+1);
+    h->AddBinContent(1,underflow);
+    h->AddBinContent(nbins,overflow);
+    h->SetBinContent(0,0);
+    h->SetBinContent(nbins+1,0);
   }
   
 };
@@ -365,6 +383,30 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   iEvent.getByToken(beamspot_token, beamspot);
   const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
 
+  //Get the vertices
+  Handle<vector<Vertex> > verticesH;
+  iEvent.getByToken(verticesToken, verticesH);
+
+  t=0;
+  Vertex v;
+  int ntk_t=0;
+  vector<TrackRef> tks_t;
+
+  vector<Vertex> vertices_ntk;
+  
+  for (auto vertex_iter = verticesH->begin(); vertex_iter != verticesH->end(); ++vertex_iter) {
+    v = verticesH->at(t);
+    tks_t = vertex_track_vec(v);
+    ntk_t = tks_t.size();
+
+    if (ntk_t > required_ntk - 1) vertices_ntk.push_back(v);
+    t++;
+  }
+  
+  nVertices = vertices_ntk.size();
+
+  if (nVertices<2) return;
+
   //Get gen particles for truth-level vertices
   edm::Handle<std::vector<reco::GenParticle>> genParticle_handle;
   iEvent.getByToken(GenParticleToken_,genParticle_handle);
@@ -373,7 +415,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   std::vector<reco::GenParticle>::const_iterator genParticleIter;
   float maxDist = 0;
   for(genParticleIter = genParticle_handle->begin(); genParticleIter != genParticle_handle->end(); ++genParticleIter){
-    if(isChargedStopDecayProductStatusOne(genParticleIter)){
+    if(isChargedStopDecayProductStatusOne(genParticleIter).first){
       //std::cout<<"pdgid: "<<genParticleIter->pdgId()<<" vertex xyz: "<<genParticleIter->vx()<<" "<<genParticleIter->vy()<<" "<<genParticleIter->vz()<<" status: "<<genParticleIter->status()<<" parent id: "<<genParticleIter->mother(0)->pdgId()<<" parent vertex: "<<genParticleIter->mother(0)->vx()<<" "<<genParticleIter->mother(0)->vy()<<" "<<genParticleIter->mother(0)->vz()<<" parent status: "<<genParticleIter->mother(0)->status()<<std::endl;
 
       float dxy = TMath::Sqrt(pow(genParticleIter->vx()-beamspot->x0(),2)+pow(genParticleIter->vy()-beamspot->y0(),2));
@@ -381,7 +423,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       
     }
     if(genParticleIter->numberOfMothers()<1) continue;
-    if(isStopDecay(genParticleIter->mother(0))){
+    if(isStopDecay(genParticleIter->mother(0)).first){
       //std::cout<<"isStop block"<<std::endl;
       //std::cout<<"pdgid: "<<genParticleIter->pdgId()<<" vertex xyz: "<<genParticleIter->vx()<<" "<<genParticleIter->vy()<<" "<<genParticleIter->vz()<<" status: "<<genParticleIter->status()<<" parent id: "<<genParticleIter->mother(0)->pdgId()<<" parent vertex: "<<genParticleIter->mother(0)->vx()<<" "<<genParticleIter->mother(0)->vy()<<" "<<genParticleIter->mother(0)->vz()<<" parent status: "<<genParticleIter->mother(0)->status()<<std::endl;
       float dist = TMath::Sqrt(pow(genParticleIter->vx()-beamspot->x0(),2)+pow(genParticleIter->vy()-beamspot->y0(),2));
@@ -395,7 +437,10 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       for(auto vertex: genVertices){
 	if((vertex.x()==genVertex.x()) && (vertex.y()==genVertex.y()) && (vertex.z()==genVertex.z())) isDupe = true;
       }
-      if(!isDupe) genVertices.push_back(genVertex);
+      if(!isDupe){
+	genVertices.push_back(genVertex);
+	h_genVert_dBV->Fill(dist);
+      }
       //std::cout<<"first mother id: "<<mother->pdgId()<<" status: "<<mother->status()<<" vertex: "<<mother->vx()<<" "<<mother->vy()<<" "<<mother->vz()<<" parent id: "<<mother->mother(0)->pdgId()<<" parent status: "<<mother->mother(0)->status()<<" mother vertex: "<<mother->mother(0)->vx()<<" "<<mother->mother(0)->vy()<<" "<<mother->mother(0)->vz()<<std::endl;
       if(dist>maxDist){
 	maxDist = dist;
@@ -435,13 +480,13 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     int i_gen = -1;
     for(genParticleIter = genParticle_handle->begin(); genParticleIter != genParticle_handle->end(); ++genParticleIter){
       i_gen++;
-      if(!isChargedStopDecayProductStatusOne(genParticleIter)) continue;
+      if(!isChargedStopDecayProductStatusOne(genParticleIter).first) continue;
       float dPhi = fabs(scoutingTrackIter->tk_phi()-genParticleIter->phi());
       if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
       float dEta = fabs(scoutingTrackIter->tk_eta()-genParticleIter->eta());
       float deltaR = TMath::Sqrt(pow(dPhi,2)+pow(dEta,2));
       float ptRatio = fabs(scoutingTrackIter->tk_pt()-genParticleIter->pt())/(scoutingTrackIter->tk_pt()+genParticleIter->pt());
-      if(deltaR<0.1 && ptRatio<0.1){
+      if(deltaR<0.05 && ptRatio<0.1){
 	deltaRVec.push_back({float(i_gen),float(i_track),deltaR});
       }
     }
@@ -476,47 +521,90 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   }
   genScout_nMatches = finalMatches.size();
 
-  //Get the vertices
-  Handle<vector<Vertex> > verticesH;
-  iEvent.getByToken(verticesToken, verticesH);
-
-  t=0;
-  Vertex v;
-  int ntk_t=0;
-  vector<TrackRef> tks_t;
-
-  vector<Vertex> vertices_ntk;
-  
-  for (auto vertex_iter = verticesH->begin(); vertex_iter != verticesH->end(); ++vertex_iter) {
-    v = verticesH->at(t);
-    tks_t = vertex_track_vec(v);
-    ntk_t = tks_t.size();
-
-    if (ntk_t > required_ntk - 1) vertices_ntk.push_back(v);
-    t++;
-  }
-  
-  nVertices = vertices_ntk.size();
-  
-  if (nVertices<2) return;
-  
   //Two leading vertices
   vector<double> dBVs;
   VertexDistanceXY vertex_dist_2d;
   t=0;
   float dBV_t;
-  
+
+  std::vector<std::vector<float>> deltaRVecVertices;
   for (auto vertex_iter = vertices_ntk.begin(); vertex_iter != vertices_ntk.end(); ++vertex_iter) {
     v = vertices_ntk.at(t);
     dBV_t = vertex_dist_2d.distance(v, fake_bs_vtx).value();
-
     dBVs.push_back(dBV_t);
-    
+
+    std::vector<TrackRef> trks = vertex_track_vec(v);
+    int i_trk = -1;
+    for(auto trk: trks){
+      i_trk++;
+      int i_gen = -1;
+      for(genParticleIter = genParticle_handle->begin(); genParticleIter != genParticle_handle->end(); ++genParticleIter){
+	i_gen++;
+	std::pair<bool,GlobalPoint> isDecayProduct = isChargedStopDecayProductStatusOne(genParticleIter);
+	if(!isDecayProduct.first) continue;
+	float dPhi = fabs(trk->phi()-genParticleIter->phi());
+	if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
+	float dEta = fabs(trk->eta()-genParticleIter->eta());
+	float deltaR = TMath::Sqrt(pow(dPhi,2)+pow(dEta,2));
+	float ptRatio = fabs(trk->pt()-genParticleIter->pt())/(trk->pt()+genParticleIter->pt());
+	if(deltaR<0.05 && ptRatio<0.1){
+	  deltaRVecVertices.push_back({float(i_gen),float(i_trk),deltaR,float(t),isDecayProduct.second.x(),isDecayProduct.second.y(),isDecayProduct.second.z()});
+	}
+      } // loop over gen particles
+    } // loop over vertex tracks
     t++;
-  }
-
+  } //loop over vertices
   
+  sort(deltaRVecVertices.begin(), deltaRVecVertices.end(), CompareDeltaR); //sort matches by deltaR smallest to largest
+  std::vector<std::vector<float>> finalMatchesVertices;
+  while(deltaRVecVertices.size()>0){
+    finalMatchesVertices.push_back(deltaRVecVertices[0]);
+    int i_genMatch = deltaRVecVertices[0][0];
+    int i_trackMatch = deltaRVecVertices[0][1];
+    int i_vtx = deltaRVecVertices[0][3];
+    deltaRVecVertices.erase(std::remove_if( deltaRVecVertices.begin(), deltaRVecVertices.end(), [i_genMatch](std::vector<float> x){return x[0]==i_genMatch;}), deltaRVecVertices.end());
+    deltaRVecVertices.erase(std::remove_if( deltaRVecVertices.begin(), deltaRVecVertices.end(), [i_trackMatch,i_vtx](std::vector<float> x){return ((x[1]==i_trackMatch)&&(x[3]==i_vtx));}), deltaRVecVertices.end());
+  }
+  std::vector<int> vectorNumMatches(t,0);
+  for(auto match: finalMatchesVertices){
+    vectorNumMatches[match[3]]++;
+    if(vectorNumMatches[match[3]]==2){
+      Vertex vert = vertices_ntk.at(match[3]);
+      h_match_vert_x_y->Fill(vert.x()-beamspot->x0(),vert.y()-beamspot->y0());
+    }
+  }
+  int nVertMatches = 0;
+  for(auto numMatches: vectorNumMatches){
+    if(numMatches>1) nVertMatches++;
+  }
+  genScoutVert_nMatches = nVertMatches;
 
+  //gen vertex matching
+  for(auto vertex: genVertices){
+    std::vector<int> numMatches(t,0);
+    for(auto match: finalMatchesVertices){
+      if((vertex.x()==match[4]) && (vertex.y()==match[5]) && (vertex.z()==match[6])){
+	numMatches[match[3]]++;
+      }
+    }
+    bool isMatched = false;
+    uint i=0;
+    for(i=0; i<numMatches.size(); i++){
+      if(numMatches[i]>1){
+	isMatched = true;
+	break;
+      }
+    }
+    if(isMatched){
+      h_match_genVert_x_y->Fill(vertex.x()-beamspot->x0(),vertex.y()-beamspot->y0());
+      h_match_genVert_dBV->Fill(TMath::Sqrt(pow(vertex.x()-beamspot->x0(),2)+pow(vertex.y()-beamspot->y0(),2)));
+      Vertex scoutVert = vertices_ntk.at(i);
+      h_resVert_x->Fill(vertex.x()-scoutVert.x());
+      h_resVert_y->Fill(vertex.y()-scoutVert.y());
+      h_resVert_z->Fill(vertex.z()-scoutVert.z());
+    }
+  }
+  
   auto largest_dBV = findTwoLargestIndices(dBVs);
   
   Vertex v1 = vertices_ntk.at(largest_dBV.first);
@@ -537,7 +625,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   phijet2 = pfjetsH->at(1).phi();
   phijet3 = pfjetsH->at(2).phi();
   phijet4 = pfjetsH->at(3).phi();
-  
+
   //Calculate the vertex distributions
   
   Measurement1D dBV_Meas1D_1 = vertex_dist_2d.distance(v1, fake_bs_vtx);
@@ -556,7 +644,6 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
   vector<TrackRef> tks_2 = vertex_track_vec(v2);
   ntk_2 = tks_2.size();
-
   
   //L1 results
   l1Result_.clear();
@@ -624,6 +711,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     tree->Branch("genVert_dVV"              , &genVert_dVV                      , "genVert_dVV/F"      );
     tree->Branch("genVert_dPhi"              , &genVert_dPhi                      , "genVert_dPhi/F"      );
     tree->Branch("genScout_nMatches"              , &genScout_nMatches                      , "genScout_nMatches/I"      );
+    tree->Branch("genScoutVert_nMatches"              , &genScoutVert_nMatches                      , "genScoutVert_nMatches/I"      );
 
     match_ptRatio = new std::vector<float>;
     match_deltaR = new std::vector<float>;
@@ -642,7 +730,8 @@ void ScoutingTreeMakerRun3::beginJob() {
 // ------------ method called once each job just after ending the event loop  ------------
 void ScoutingTreeMakerRun3::endJob() {
   // please remove this method if not needed
-
+  removeFlows(h_match_gen_dxy);
+  removeFlows(h_gen_dxy);
   h_match_gen_dxy->Sumw2();
   h_gen_dxy->Sumw2();
   TH1F* h_matchEff_dxy = (TH1F*)h_match_gen_dxy->Clone();
@@ -652,6 +741,39 @@ void ScoutingTreeMakerRun3::endJob() {
   h_matchEff_dxy->SetAxisRange(0, 1.1, "Y");
   h_matchEff_dxy->Draw();
   h_matchEff_dxy->Write();
+
+  removeFlows(h_match_genVert_dBV);
+  removeFlows(h_genVert_dBV);
+  h_match_genVert_dBV->Sumw2();
+  h_genVert_dBV->Sumw2();
+  TH1F* h_vertMatchEff_dBV = (TH1F*)h_match_genVert_dBV->Clone();
+  h_vertMatchEff_dBV->SetName("vertMatchEff_dBV");
+  h_vertMatchEff_dBV->GetYaxis()->SetTitle("Match Efficiency");
+  h_vertMatchEff_dBV->Divide(h_match_genVert_dBV, h_genVert_dBV, 1.0, 1.0, "B");
+  h_vertMatchEff_dBV->SetAxisRange(0, 1.1, "Y");
+  h_vertMatchEff_dBV->Draw();
+  h_vertMatchEff_dBV->Write();
+  
+  h_match_vert_x_y->Draw();
+  h_match_vert_x_y->Write();
+
+  h_match_genVert_x_y->Draw();
+  h_match_genVert_x_y->Write();
+
+  h_match_genVert_dBV->Draw();
+  h_match_genVert_dBV->Write();
+
+  removeFlows(h_resVert_x);
+  h_resVert_x->Draw();
+  h_resVert_x->Write();
+
+  removeFlows(h_resVert_y);
+  h_resVert_y->Draw();
+  h_resVert_y->Write();
+
+  removeFlows(h_resVert_z);
+  h_resVert_z->Draw();
+  h_resVert_z->Write();
   
   delete match_ptRatio;
   delete match_deltaR;
