@@ -195,10 +195,18 @@ private:
   TH1F* h_genVert_nParticles = new TH1F("genVert_nParticles",";Gen Vertex Number of Particles; Gen Vertices / 1", 100, 0, 100);
   TH1F* h_genVert_dPhi = new TH1F("genVert_dPhi",";Gen Vertex d#phi; Occurrences / 0.03142", 100, 0, 3.142);
   TH1F* h_genVert_dVV = new TH1F("genVert_dVV",";Gen Vertex d_{VV} [cm]; Occurrences / 0.015 cm", 1000, 0, 15);
-  TH1F* h_genVert_nVertices = new TH1F("genVert_nVertices",";Number of Gen Vertices; Occurrences / 1", 0, 5, 5);
+  TH1F* h_genVert_nVertices = new TH1F("genVert_nVertices",";Number of Gen Vertices; Occurrences / 1", 5, 0, 5);
   TH1F* h_resVert_x = new TH1F("resVert_x",";Gen X Position - Scout X Position [cm]; Gen Vertices / 0.02 cm", 100, -1, 1);
   TH1F* h_resVert_y = new TH1F("resVert_y",";Gen Y Position - Scout Y Position [cm]; Gen Vertices / 0.02 cm", 100, -1, 1);
   TH1F* h_resVert_z = new TH1F("resVert_z",";Gen Z Position - Scout Z Position [cm]; Gen Vertices / 0.02 cm", 100, -1, 1);
+  TH1F* h_scoutVert_dBV = new TH1F("scoutVert_dBV",";Scout Vertex d_{BV} [cm]; Scout Vertices / 0.01 cm", 100, 0, 1);
+  TH1F* h_scoutVert_phi = new TH1F("scoutVert_phi",";Scout Vertex #phi; Scout Vertices / 0.06284", 100, -3.142, 3.142);
+  TH1F* h_scoutVert_z = new TH1F("scoutVert_z",";Scout Vertex z [cm]; Scout Vertices / 0.4 cm", 100, -20, 20);
+  TH2F* h_scoutVert_x_y = new TH2F("scoutVert_x_y","Scout Vertex Position; X Position [cm] / 0.02 cm; Y Position [cm] / 0.02 cm", 100, -1, 1, 100, -1, 1);
+  TH1F* h_scoutVert_nTracks = new TH1F("scoutVert_nTracks",";Scout Vertex Number of Particles; Scout Vertices / 1", 100, 0, 100);
+  TH1F* h_scoutVert_dPhi = new TH1F("scoutVert_dPhi",";Scout Vertex d#phi; Occurrences / 0.03142", 100, 0, 3.142);
+  TH1F* h_scoutVert_dVV = new TH1F("scoutVert_dVV",";Scout Vertex d_{VV} [cm]; Occurrences / 0.015 cm", 1000, 0, 15);
+  TH1F* h_scoutVert_nVertices = new TH1F("scoutVert_nVertices",";Number of Scout Vertices; Occurrences / 1", 10, 0, 10);
   
   typedef std::set<reco::TrackRef> track_set;
   typedef std::vector<reco::TrackRef> track_vec;
@@ -414,6 +422,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
   if (nVertices<2) return;
 
+  h_scoutVert_nVertices->Fill(vertices_ntk.size());
+  
   //Get gen particles for truth-level vertices
   edm::Handle<std::vector<reco::GenParticle>> genParticle_handle;
   iEvent.getByToken(GenParticleToken_,genParticle_handle);
@@ -440,16 +450,16 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       if(!isDupe){
 	genVertices.push_back(genVertex);
 	h_genVert_dBV->Fill(dist);
-	h_genVert_phi->Fill(atan2(genVertex.y(),genVertex.x()));
-	h_genVert_z->Fill(genVertex.z());
-	h_genVert_x_y->Fill(genVertex.x(),genVertex.y());
+	h_genVert_phi->Fill(atan2(genVertex.y()-beamspot->y0(),genVertex.x()-beamspot->x0()));
+	h_genVert_z->Fill(genVertex.z()-beamspot->z0());
+	h_genVert_x_y->Fill(genVertex.x()-beamspot->x0(),genVertex.y()-beamspot->y0());
       }
       //std::cout<<"first mother id: "<<mother->pdgId()<<" status: "<<mother->status()<<" vertex: "<<mother->vx()<<" "<<mother->vy()<<" "<<mother->vz()<<" parent id: "<<mother->mother(0)->pdgId()<<" parent status: "<<mother->mother(0)->status()<<" mother vertex: "<<mother->mother(0)->vx()<<" "<<mother->mother(0)->vy()<<" "<<mother->mother(0)->vz()<<std::endl;
       if(dist>maxDist){
 	maxDist = dist;
-	genVert_x = genParticleIter->vx();
-	genVert_y = genParticleIter->vy();
-	genVert_z = genParticleIter->vz();
+	genVert_x = genParticleIter->vx()-beamspot->x0();
+	genVert_y = genParticleIter->vy()-beamspot->y0();
+	genVert_z = genParticleIter->vz()-beamspot->z0();
 	genVert_dBV = dist;
 	genVert_3d = TMath::Sqrt(pow(genParticleIter->vx()-beamspot->x0(),2)+pow(genParticleIter->vy()-beamspot->y0(),2)+pow(genParticleIter->vz()-beamspot->z0(),2));
 	genVert_motherEta = mother->eta();
@@ -466,6 +476,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       h_gen_dxy->Fill(dxy); 
     }
   } //loop over gen particles
+
   h_genVert_nVertices->Fill(genVertices.size());
   //count number of gen particles from same vertex
   std::vector<int> nMatches(genVertices.size(),0);
@@ -484,17 +495,19 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
   if(genVertices.size()==2){
     genVert_dVV = TMath::Sqrt(pow(genVertices[0].x()-genVertices[1].x(),2)+pow(genVertices[0].y()-genVertices[1].y(),2)+pow(genVertices[0].z()-genVertices[1].z(),2));
-    float dPhi = fabs(atan2(genVertices[0].y(),genVertices[0].x())-atan2(genVertices[1].y(),genVertices[1].x()));
+    float dPhi = fabs(atan2(genVertices[0].y()-beamspot->y0(),genVertices[0].x()-beamspot->x0())-atan2(genVertices[1].y()-beamspot->y0(),genVertices[1].x()-beamspot->x0()));
     if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
     genVert_dPhi = dPhi;
   }
 
-  for(uint i=0; i<(genVertices.size()-1); i++){
-    for(uint j=i+1; j<genVertices.size(); j++){
-      float dPhi = fabs(atan2(genVertices[i].y(),genVertices[i].x())-atan2(genVertices[j].y(),genVertices[j].x()));
-      if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
-      h_genVert_dPhi->Fill(dPhi);
-      h_genVert_dVV->Fill(TMath::Sqrt(pow(genVertices[i].x()-genVertices[j].x(),2)+pow(genVertices[i].y()-genVertices[j].y(),2)+pow(genVertices[i].z()-genVertices[j].z(),2)));
+  if(genVertices.size()>1){
+    for(uint i=0; i<(genVertices.size()-1); i++){
+      for(uint j=i+1; j<genVertices.size(); j++){
+	float dPhi = fabs(atan2(genVertices[i].y()-beamspot->y0(),genVertices[i].x()-beamspot->x0())-atan2(genVertices[j].y()-beamspot->y0(),genVertices[j].x()-beamspot->x0()));
+	if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
+	h_genVert_dPhi->Fill(dPhi);
+	h_genVert_dVV->Fill(TMath::Sqrt(pow(genVertices[i].x()-genVertices[j].x(),2)+pow(genVertices[i].y()-genVertices[j].y(),2)+pow(genVertices[i].z()-genVertices[j].z(),2)));
+      }
     }
   }
   
@@ -569,6 +582,13 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
     std::vector<TrackRef> trks = vertex_track_vec(v);
     //std::cout<<"vertex number of tracks: "<<trks.size()<<std::endl;
+
+    h_scoutVert_dBV->Fill(dBV_t);
+    h_scoutVert_phi->Fill(atan2(v.y()-beamspot->y0(),v.x()-beamspot->x0()));
+    h_scoutVert_z->Fill(v.z()-beamspot->z0());
+    h_scoutVert_x_y->Fill(v.x()-beamspot->x0(),v.y()-beamspot->y0());
+    h_scoutVert_nTracks->Fill(trks.size());
+    
     int i_trk = -1;
     for(auto trk: trks){
       i_trk++;
@@ -644,6 +664,17 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       h_resVert_x->Fill(vertex.x()-scoutVert.x());
       h_resVert_y->Fill(vertex.y()-scoutVert.y());
       h_resVert_z->Fill(vertex.z()-scoutVert.z());
+    }
+  }
+
+  if(vertices_ntk.size()>1){
+    for (uint i=0; i<(vertices_ntk.size()-1); i++){
+      for(uint j=i+1; j<vertices_ntk.size(); j++){
+	float dPhi = fabs(atan2(vertices_ntk[i].y()-beamspot->y0(),vertices_ntk[i].x()-beamspot->x0())-atan2(vertices_ntk[j].y()-beamspot->y0(),vertices_ntk[j].x()-beamspot->x0()));
+	if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
+	h_scoutVert_dPhi->Fill(dPhi);
+	h_scoutVert_dVV->Fill(TMath::Sqrt(pow(vertices_ntk[i].x()-vertices_ntk[j].x(),2)+pow(vertices_ntk[i].y()-vertices_ntk[j].y(),2)+pow(vertices_ntk[i].z()-vertices_ntk[j].z(),2)));
+      }
     }
   }
   
@@ -843,6 +874,37 @@ void ScoutingTreeMakerRun3::endJob() {
   removeFlows(h_resVert_z);
   h_resVert_z->Draw();
   h_resVert_z->Write();
+
+  removeFlows(h_scoutVert_dBV);
+  h_scoutVert_dBV->Draw();
+  h_scoutVert_dBV->Write();
+
+  removeFlows(h_scoutVert_phi);
+  h_scoutVert_phi->Draw();
+  h_scoutVert_phi->Write();
+
+  removeFlows(h_scoutVert_z);
+  h_scoutVert_z->Draw();
+  h_scoutVert_z->Write();
+
+  h_scoutVert_x_y->Draw();
+  h_scoutVert_x_y->Write();
+
+  removeFlows(h_scoutVert_nTracks);
+  h_scoutVert_nTracks->Draw();
+  h_scoutVert_nTracks->Write();
+
+  removeFlows(h_scoutVert_dPhi);
+  h_scoutVert_dPhi->Draw();
+  h_scoutVert_dPhi->Write();
+
+  removeFlows(h_scoutVert_dVV);
+  h_scoutVert_dVV->Draw();
+  h_scoutVert_dVV->Write();
+
+  removeFlows(h_scoutVert_nVertices);
+  h_scoutVert_nVertices->Draw();
+  h_scoutVert_nVertices->Write();
   
   delete match_ptRatio;
   delete match_deltaR;
