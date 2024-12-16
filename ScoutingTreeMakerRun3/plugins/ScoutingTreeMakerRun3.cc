@@ -108,7 +108,9 @@ private:
   const edm::EDGetTokenT<std::vector<Run3ScoutingPhoton> >  photonsToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingParticle> >  pfcandsToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingPFJet> >  pfjetsToken;
-  const edm::EDGetTokenT<std::vector<Run3ScoutingTrack> >  tracksToken;
+  //const edm::EDGetTokenT<std::vector<Run3ScoutingTrack> >  tracksToken;
+
+  const edm::EDGetTokenT<std::vector<reco::Track> >  tracksToken;
   const edm::EDGetTokenT<std::vector<reco::Vertex> >  verticesToken;
 
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
@@ -331,7 +333,8 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   photonsToken             (consumes<std::vector<Run3ScoutingPhoton> >         (iConfig.getParameter<edm::InputTag>("photons"))),
   pfcandsToken             (consumes<std::vector<Run3ScoutingParticle> >         (iConfig.getParameter<edm::InputTag>("pfcands"))),
   pfjetsToken              (consumes<std::vector<Run3ScoutingPFJet> >            (iConfig.getParameter<edm::InputTag>("pfjets"))),
-  tracksToken              (consumes<std::vector<Run3ScoutingTrack> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
+  //tracksToken              (consumes<std::vector<Run3ScoutingTrack> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
+  tracksToken              (consumes<std::vector<reco::Track> >            (iConfig.getParameter<edm::InputTag>("tracks"))),    
   verticesToken            (consumes<std::vector<reco::Vertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),
   
   beamspot_token(consumes<reco::BeamSpot>(iConfig.getParameter<edm::InputTag>("beamspot_src"))),
@@ -516,9 +519,10 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   iEvent.getByToken(TrackingParticleToken_, TrackingParticleHandle);
 
   //Get scouting tracks
-  edm::Handle<std::vector<Run3ScoutingTrack>> ScoutingTrackHandle;
+  //edm::Handle<std::vector<Run3ScoutingTrack>> ScoutingTrackHandle;
+  edm::Handle<std::vector<reco::Track>> ScoutingTrackHandle;
   iEvent.getByToken(tracksToken, ScoutingTrackHandle);
-  std::vector<Run3ScoutingTrack>::const_iterator scoutingTrackIter;
+  std::vector<reco::Track>::const_iterator scoutingTrackIter;
   int i_track = -1;
   std::vector<std::vector<float>> deltaRVec;
   for(scoutingTrackIter = ScoutingTrackHandle->begin(); scoutingTrackIter != ScoutingTrackHandle->end(); ++scoutingTrackIter){
@@ -528,11 +532,11 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     for(genParticleIter = genParticle_handle->begin(); genParticleIter != genParticle_handle->end(); ++genParticleIter){
       i_gen++;
       if(!isChargedStopDecayProductStatusOne(genParticleIter).first) continue;
-      float dPhi = fabs(scoutingTrackIter->tk_phi()-genParticleIter->phi());
+      float dPhi = fabs(scoutingTrackIter->phi()-genParticleIter->phi());
       if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
-      float dEta = fabs(scoutingTrackIter->tk_eta()-genParticleIter->eta());
+      float dEta = fabs(scoutingTrackIter->eta()-genParticleIter->eta());
       float deltaR = TMath::Sqrt(pow(dPhi,2)+pow(dEta,2));
-      float ptRatio = fabs(scoutingTrackIter->tk_pt()-genParticleIter->pt())/(scoutingTrackIter->tk_pt()+genParticleIter->pt());
+      float ptRatio = fabs(scoutingTrackIter->pt()-genParticleIter->pt())/(scoutingTrackIter->pt()+genParticleIter->pt());
       if(deltaR<0.05 && ptRatio<0.1){
 	deltaRVec.push_back({float(i_gen),float(i_track),deltaR});
       }
@@ -550,11 +554,11 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   }
   for(auto match: finalMatches){
     float pt_gen = (genParticle_handle->begin()+match[0])->pt();
-    float pt_track = (ScoutingTrackHandle->begin()+match[1])->tk_pt();
+    float pt_track = (ScoutingTrackHandle->begin()+match[1])->pt();
     float eta_gen = (genParticle_handle->begin()+match[0])->eta();
-    float eta_track = (ScoutingTrackHandle->begin()+match[1])->tk_eta();
+    float eta_track = (ScoutingTrackHandle->begin()+match[1])->eta();
     float phi_gen = (genParticle_handle->begin()+match[0])->phi();
-    float phi_track = (ScoutingTrackHandle->begin()+match[1])->tk_phi();
+    float phi_track = (ScoutingTrackHandle->begin()+match[1])->phi();
     match_ptRatio->push_back(fabs(pt_track-pt_gen)/(pt_track+pt_gen));
     match_deltaR->push_back(match[2]);
     match_diffPt->push_back(fabs(pt_gen-pt_track));
