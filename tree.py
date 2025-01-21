@@ -42,6 +42,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       l1tAlgBlkInputTag = cms.InputTag("gtStage2Digis"),
                                       l1tExtBlkInputTag = cms.InputTag("gtStage2Digis"),
                                       doL1 = cms.bool( True ),
+                                      doPhiCorrection = cms.bool( False ),
                                       l1Seeds           = cms.vstring(L1Info),
                                       muons             = cms.InputTag("hltScoutingMuonPacker"),
                                       electrons         = cms.InputTag("hltScoutingEgammaPacker"),
@@ -56,7 +57,8 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       rho               = cms.InputTag("hltScoutingPFPacker","rho"),
                                       beamspot_src = cms.InputTag('offlineBeamSpot'),
                                       genParticle_src = cms.InputTag('genParticles',''),
-                                      trackingParticle_src = cms.InputTag('prunedTrackingParticles','')
+                                      trackingParticle_src = cms.InputTag('prunedTrackingParticles',''),
+                                      generatorName = cms.InputTag('generator')
                                   )
 
 process.p = cms.Path(process.gtStage2Digis+process.scoutingTree)
