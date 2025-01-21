@@ -61,6 +61,7 @@ process.Vertexer = cms.EDProducer('Vertexer',
                                   max_nm1_refit_count = cms.int32(-1),
                                   #trackrefine_sigmacut = cms.double(5), # track refinement criteria (*only* if do_track_refinement = True)
                                   #trackrefine_trimmax = cms.double(5), # track refinement criteria (*only* if do_track_refinement = True)
+                                  verbose = cms.bool(False),
                                   )
 
 # Save only the scouting collections on the output file

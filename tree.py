@@ -13,7 +13,7 @@ process.maxEvents = cms.untracked.PSet(
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring( 
-        'file:vertexer_test.root'
+        'file:vertexer_test_1mm.root'
     )
 )
 
@@ -35,7 +35,7 @@ L1Info = ["L1_HTT200er", "L1_HTT255er", "L1_HTT280er", "L1_HTT320er", "L1_HTT360
 
 #For CMSSW 13.3.0, the muon tag is hltScoutingMuonPacker, whilst for 14X it's hltScoutingMuonPackerNoVtx
 process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
-                                      required_ntk     = cms.int32(2),
+                                      required_ntk     = cms.int32(5),
                                       triggerresults   = cms.InputTag("TriggerResults", "", "HLT"),
                                       ReadPrescalesFromFile = cms.bool( False ),
                                       AlgInputTag       = cms.InputTag("gtStage2Digis"),
@@ -49,7 +49,8 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       photons           = cms.InputTag("hltScoutingEgammaPacker"),
                                       pfcands           = cms.InputTag("hltScoutingPFPacker"),
                                       pfjets            = cms.InputTag("hltScoutingPFPacker"),
-                                      tracks            = cms.InputTag("hltScoutingTrackPacker"),
+                                      tracks            = cms.InputTag("hltScoutingUnpackProducer", "Track"), #for scouting tracks
+                                      #tracks            = cms.InputTag("generalTracks"), #for reco tracks
                                       primaryVertices   = cms.InputTag("hltScoutingPrimaryVertexPacker","primaryVtx"),
                                       displacedVertices = cms.InputTag("Vertexer"), 
                                       pfMet             = cms.InputTag("hltScoutingPFPacker","pfMetPt"),
