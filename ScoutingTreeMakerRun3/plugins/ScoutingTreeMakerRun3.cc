@@ -697,7 +697,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     float dxy = TMath::Sqrt(pow((genParticle_handle->begin()+match[0])->vx()-beamspot->x0(),2)+pow((genParticle_handle->begin()+match[0])->vy()-beamspot->y0(),2));
     h_match_gen_dxy->Fill(dxy);
     match_gen_dxy->push_back(dxy);
-    float dxy_track = TMath::Sqrt(pow((ScoutingTrackHandle->begin()+match[1])->tk_vx()-beamspot->x0(),2)+pow((ScoutingTrackHandle->begin()+match[1])->tk_vy()-beamspot->y0(),2));
+    float dxy_track = TMath::Sqrt(pow((ScoutingTrackHandle->begin()+match[1])->vx()-beamspot->x0(),2)+pow((ScoutingTrackHandle->begin()+match[1])->vy()-beamspot->y0(),2));
     match_diffDxy->push_back(dxy-dxy_track);
     std::pair<double,double> correction = gen_dxy_correction((genParticle_handle->begin()+match[0]),beamspot);
     float dxy_corrected = correction.first;
