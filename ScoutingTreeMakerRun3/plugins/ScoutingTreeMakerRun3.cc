@@ -129,7 +129,19 @@ private:
   bool doPhiCorrection;
   triggerExpression::Data triggerCache_;
 
-  bool l1_HTT280;
+  bool L1_HTT200er;
+  bool L1_HTT255er;
+  bool L1_HTT280er;
+  bool L1_HTT320er;
+  bool L1_HTT360er;
+  bool L1_HTT400er;
+  bool L1_HTT450er;
+  bool L1_ETT2000;
+  bool L1_SingleJet180;
+  bool L1_SingleJet200;
+  bool L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5;
+  bool L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5;
+  bool L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5;
   
   edm::InputTag                algInputTag_;
   edm::InputTag                extInputTag_;
@@ -893,7 +905,21 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       l1GtUtils_->getFinalDecisionByName(string(l1Seeds_[iseed]), l1htbit);
       l1Result_.push_back( l1htbit );
     }
-    l1GtUtils_->getFinalDecisionByName(string("L1_HTT280er"), l1_HTT280);
+      
+    l1GtUtils_->getFinalDecisionByName(string("L1_HTT200er"), L1_HTT200er);
+    l1GtUtils_->getFinalDecisionByName(string("L1_HTT255er"), L1_HTT255er);
+    l1GtUtils_->getFinalDecisionByName(string("L1_HTT280er"), L1_HTT280er);
+    l1GtUtils_->getFinalDecisionByName(string("L1_HTT320er"), L1_HTT320er);
+    l1GtUtils_->getFinalDecisionByName(string("L1_HTT360er"), L1_HTT360er);
+    l1GtUtils_->getFinalDecisionByName(string("L1_HTT400er"), L1_HTT400er);
+    l1GtUtils_->getFinalDecisionByName(string("L1_HTT450er"), L1_HTT450er);
+    l1GtUtils_->getFinalDecisionByName(string("L1_ETT2000"), L1_ETT2000);
+    l1GtUtils_->getFinalDecisionByName(string("L1_SingleJet180"), L1_SingleJet180);
+    l1GtUtils_->getFinalDecisionByName(string("L1_SingleJet200"), L1_SingleJet200);
+    l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5);
+    l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5);
+    l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5);
+    
   }
   
   tree->Fill();
@@ -937,7 +963,22 @@ void ScoutingTreeMakerRun3::beginJob() {
     tree->Branch("HT"                  , &HT                          , "HT/F"          );
     
     tree->Branch("l1Result", "std::vector<bool>"             ,&l1Result_, 32000, 0  );
-    tree->Branch("l1_HTT280"           , &l1_HTT280                   , "l1_HTT280/O"  );
+
+    //the L1 results also in separeated branches  
+    tree->Branch("L1_HTT200er"           , &L1_HTT200er                   , "L1_HTT200er/O"  );
+    tree->Branch("L1_HTT255er"           , &L1_HTT255er                   , "L1_HTT255er/O"  );
+    tree->Branch("L1_HTT280er"           , &L1_HTT280er                   , "L1_HTT280er/O"  );
+    tree->Branch("L1_HTT320er"           , &L1_HTT320er                   , "L1_HTT320er/O"  );
+    tree->Branch("L1_HTT360er"           , &L1_HTT360er                   , "L1_HTT360er/O"  );
+    tree->Branch("L1_HTT400er"           , &L1_HTT400er                   , "L1_HTT400er/O"  );
+    tree->Branch("L1_HTT450er"           , &L1_HTT450er                   , "L1_HTT450er/O"  );
+    tree->Branch("L1_ETT2000"           , &L1_ETT2000                   , "L1_ETT2000/O"  );
+    tree->Branch("L1_SingleJet180"           , &L1_SingleJet180                   , "L1_SingleJet180/O"  );
+    tree->Branch("L1_SingleJet200"           , &L1_SingleJet200                   , "L1_SingleJet200/O"  );
+    tree->Branch("L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5", &L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5, "L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5/O"  );
+    tree->Branch("L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5", &L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5, "L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5/O"  );
+    tree->Branch("L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5", &L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5, "L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5/O"  );
+    
     tree->Branch("genVert_x_1"              , &genVert_x_1                      , "genVert_x_1/F"      );
     tree->Branch("genVert_y_1"              , &genVert_y_1                      , "genVert_y_1/F"      );
     tree->Branch("genVert_z_1"              , &genVert_z_1                      , "genVert_z_1/F"      );
