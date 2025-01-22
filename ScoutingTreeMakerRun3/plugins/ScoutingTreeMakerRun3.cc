@@ -127,6 +127,8 @@ private:
 
   bool doL1;
   bool doPhiCorrection;
+  double luminosity;
+  double crossSection;
   triggerExpression::Data triggerCache_;
 
   bool l1_HTT280;
@@ -223,6 +225,7 @@ private:
   std::vector<float>* scoutVert_dPhi;
   std::vector<float>* scoutVert_dVV;
   int scoutVert_nVertices;
+  double weight;
 
   TH1F* h_match_gen_dxy = new TH1F("match_gen_dxy",";Gen particle d_{xy} [cm]; Gen particles / 0.01 cm", 100, 0, 1);
   TH1F* h_gen_dxy = new TH1F("gen_dxy",";Gen particle d_{xy} [cm]; Gen particles / 0.01 cm", 100, 0, 1);
@@ -248,7 +251,8 @@ private:
   TH1F* h_scoutVert_dPhi = new TH1F("scoutVert_dPhi",";Scout Vertex d#phi; Occurrences / 0.03142", 100, 0, 3.142);
   TH1F* h_scoutVert_dVV = new TH1F("scoutVert_dVV",";Scout Vertex d_{VV} [cm]; Occurrences / 0.015 cm", 1000, 0, 15);
   TH1F* h_scoutVert_nVertices = new TH1F("scoutVert_nVertices",";Number of Scout Vertices; Occurrences / 1", 10, 0, 10);
-  TH1F* h_weights = new TH1F("weights",";Cut Applied; Sum of Weights",3,0,3);
+  TH1F* h_genWeights = new TH1F("genWeights",";Cut Applied; Sum of Gen Weights",3,0,3);
+  TH1F* h_weightsSquared = new TH1F("weightsSquared",";Cut Applied; Sum of Squared Weights",3,0,3);
   
   typedef std::set<reco::TrackRef> track_set;
   typedef std::vector<reco::TrackRef> track_vec;
@@ -406,7 +410,9 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   TrackingParticleToken_(consumes(iConfig.getParameter<edm::InputTag>("trackingParticle_src"))),
   GeneratorToken_(consumes(iConfig.getParameter<edm::InputTag>("generatorName"))),
   doL1                     (iConfig.existsAs<bool>("doL1")               ?    iConfig.getParameter<bool>  ("doL1")            : false),
-  doPhiCorrection          (iConfig.existsAs<bool>("doPhiCorrection")    ?    iConfig.getParameter<bool>  ("doPhiCorrection") : false)
+  doPhiCorrection          (iConfig.existsAs<bool>("doPhiCorrection")    ?    iConfig.getParameter<bool>  ("doPhiCorrection") : false),
+  luminosity          (iConfig.existsAs<double>("luminosity")    ?    iConfig.getParameter<double>  ("luminosity") : 1.0),
+  crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0)
 {
     usesResource("TFileService");
     if (doL1) {
@@ -480,8 +486,11 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   //Get tracking particles
   edm::Handle<GenEventInfoProduct> generatorHandle;
   iEvent.getByToken(GeneratorToken_, generatorHandle);
-  double theWeight = generatorHandle->weight();
-  h_weights->Fill("None",theWeight);
+  double genWeight = generatorHandle->weight();
+  h_genWeights->Fill("None",genWeight);
+  double theWeight = genWeight*luminosity*crossSection;
+  weight = theWeight;
+  h_weightsSquared->Fill("None",pow(theWeight,2));
   
   //Get the jets
   Handle<vector<Run3ScoutingPFJet> > pfjetsH;
@@ -491,7 +500,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   nPFJets = pfjetsH->size();
   if (nPFJets<4) return;
 
-  h_weights->Fill("nJets",theWeight);
+  h_genWeights->Fill("nJets",genWeight);
+  h_weightsSquared->Fill("nJets",pow(theWeight,2));
   
   HT = 0;
   int t = 0;
@@ -529,7 +539,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
   if (nVertices<2) return;
 
-  h_weights->Fill("nVertices",theWeight);
+  h_genWeights->Fill("nVertices",genWeight);
+  h_weightsSquared->Fill("nVertices",pow(theWeight,2));
   
   h_scoutVert_nVertices->Fill(vertices_ntk.size());
   scoutVert_nVertices = vertices_ntk.size();
@@ -953,6 +964,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     tree->Branch("genScoutVert_nMatches"              , &genScoutVert_nMatches                      , "genScoutVert_nMatches/I"      );
     tree->Branch("genVert_nVertices", &genVert_nVertices, "genVert_nVertices/I");
     tree->Branch("scoutVert_nVertices", &scoutVert_nVertices, "scoutVert_nVertices/I");
+    tree->Branch("weight", &weight, "weight/D");
 
     match_ptRatio = new std::vector<float>;
     match_deltaR = new std::vector<float>;
@@ -1029,9 +1041,12 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutVert_dPhi",&scoutVert_dPhi);
     objectTree->Branch("scoutVert_dVV",&scoutVert_dVV);
 
-    h_weights->GetXaxis()->SetBinLabel(1,"None");
-    h_weights->GetXaxis()->SetBinLabel(2,"nJets");
-    h_weights->GetXaxis()->SetBinLabel(3,"nVertices");
+    h_genWeights->GetXaxis()->SetBinLabel(1,"None");
+    h_genWeights->GetXaxis()->SetBinLabel(2,"nJets");
+    h_genWeights->GetXaxis()->SetBinLabel(3,"nVertices");
+    h_weightsSquared->GetXaxis()->SetBinLabel(1,"None");
+    h_weightsSquared->GetXaxis()->SetBinLabel(2,"nJets");
+    h_weightsSquared->GetXaxis()->SetBinLabel(3,"nVertices");
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
@@ -1070,8 +1085,11 @@ void ScoutingTreeMakerRun3::endJob() {
   h_match_genVert_dBV->Draw();
   h_match_genVert_dBV->Write();
 
-  h_weights->Draw();
-  h_weights->Write();
+  h_genWeights->Draw();
+  h_genWeights->Write();
+
+  h_weightsSquared->Draw();
+  h_weightsSquared->Write();
   
   removeFlows(h_genVert_phi);
   h_genVert_phi->Draw();

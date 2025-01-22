@@ -13,7 +13,7 @@ process.maxEvents = cms.untracked.PSet(
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring( 
-        'file:vertexer_test_1mm.root'
+        'file:vertexer.root'
     )
 )
 
@@ -43,6 +43,8 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       l1tExtBlkInputTag = cms.InputTag("gtStage2Digis"),
                                       doL1 = cms.bool( True ),
                                       doPhiCorrection = cms.bool( False ),
+                                      luminosity = cms.double(108.96), #2024 luminosity (fb-1)
+                                      crossSection = cms.double(1), # cross section in fb
                                       l1Seeds           = cms.vstring(L1Info),
                                       muons             = cms.InputTag("hltScoutingMuonPacker"),
                                       electrons         = cms.InputTag("hltScoutingEgammaPacker"),
