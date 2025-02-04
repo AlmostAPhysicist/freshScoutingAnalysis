@@ -33,7 +33,7 @@ process.hltScoutingUnpackProducer = cms.EDProducer('HLTScoutingUnpackProducer',
 # Save only the scouting collections on the output file
 process.out = cms.OutputModule("PoolOutputModule",
     fileName = cms.untracked.string('scout.root'),
-    outputCommands = cms.untracked.vstring('drop *', 'keep *_hltGtStage2ObjectMap_*_*', 'keep *_TriggerResults_*_*', 'keep *_hltFEDSelectorL1_*_*', 'keep *_hltScouting*_*_*', 'keep *_genParticles_*_*', 'keep *_prunedTrackingParticles_*_*','keep GenEventInfoProduct_*_*_*', 'keep *_prunedGenParticles_*_*')
+    outputCommands = cms.untracked.vstring('drop *', 'keep *_hltGtStage2ObjectMap_*_*', 'keep *_TriggerResults_*_*', 'keep *_hltFEDSelectorL1_*_*', 'keep *_hltScouting*_*_*', 'keep *_genParticles_*_*', 'keep *_prunedTrackingParticles_*_*','keep GenEventInfoProduct_*_*_*', 'keep *_prunedGenParticles_*_*', 'keep *_particleFlow_*_*', 'keep *_generalTracks_*_*', 'keep *_lostTracks*_*_*', 'keep *_packedGenParticles_*_*', 'keep *_packedPFCandidate*_*_*')
 )
 
 # Usually it is better to put producers on a task instead of a path
