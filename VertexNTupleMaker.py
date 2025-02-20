@@ -128,7 +128,8 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       AlgInputTag       = cms.InputTag("gtStage2Digis"),
                                       l1tAlgBlkInputTag = cms.InputTag("gtStage2Digis"),
                                       l1tExtBlkInputTag = cms.InputTag("gtStage2Digis"),
-                                      doL1 = cms.bool( True ),
+                                      doTrigger = cms.bool( True ),
+                                      isScouting = cms.bool(options.isScouting),
                                       doPhiCorrection = cms.bool( False ),
                                       doGenMatching = cms.bool( False ),
                                       luminosity = cms.double(options.lumi), #2024 luminosity (fb-1)
@@ -140,6 +141,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       pfjets            = pfjetsTag,
                                       patjets           = patjetsTag,
                                       tracks            = cms.InputTag("hltScoutingUnpackProducer","Track"),
+                                      trackRefs         = cms.InputTag("hltScoutingUnpackProducer", "Track-RefToOriginal"),
                                       primaryVertices   = pvTag,
                                       displacedVertices = cms.InputTag("Vertexer"),
                                       pfMet             = cms.InputTag("hltScoutingPFPacker","pfMetPt"),
@@ -153,4 +155,3 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
 # Usually it is better to put producers on a task instead of a path
 # but paths also work.
 process.p = cms.Path(process.hltScoutingUnpackProducer+process.offlineBeamSpot+process.Vertexer+process.gtStage2Digis+process.scoutingTree)
-

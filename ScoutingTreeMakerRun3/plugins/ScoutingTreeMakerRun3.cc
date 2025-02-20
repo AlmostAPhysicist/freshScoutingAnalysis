@@ -119,18 +119,19 @@ private:
   const edm::EDGetTokenT<std::vector<pat::Jet> >  patjetsToken;
   //const edm::EDGetTokenT<std::vector<Run3ScoutingTrack> >  tracksToken;
   const edm::EDGetTokenT<std::vector<reco::Track> >  tracksToken;
+  const edm::EDGetTokenT<edm::ValueMap<edm::Ref<std::vector<Run3ScoutingTrack>>> >  tracksRefToken;
   const edm::EDGetTokenT<std::vector<reco::Vertex> >  verticesToken;
 
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::GenParticle>> GenParticleToken_;
   const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> token_builder;
-  
-  
+    
   std::vector<std::string> triggerPathsVector;
   std::map<std::string, int> triggerPathsMap;
 
-  bool doL1;
+  bool doTrigger;
+  bool isScouting;
   bool doPhiCorrection;
   bool doGenMatching;
   double luminosity;
@@ -151,6 +152,7 @@ private:
   bool L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5;
   bool L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5;
   bool L1_FinalResult;
+  bool HLT_FinalResult;
   
   edm::InputTag                algInputTag_;
   edm::InputTag                extInputTag_;
@@ -455,20 +457,22 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   pfjetsToken              (consumes<std::vector<Run3ScoutingPFJet> >            (iConfig.getParameter<edm::InputTag>("pfjets"))),
   patjetsToken              (consumes<std::vector<pat::Jet> >            (iConfig.getParameter<edm::InputTag>("patjets"))),
   //tracksToken              (consumes<std::vector<Run3ScoutingTrack> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
-  tracksToken              (consumes<std::vector<reco::Track> >            (iConfig.getParameter<edm::InputTag>("tracks"))),    
+  tracksToken              (consumes<std::vector<reco::Track> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
+  tracksRefToken              (consumes<edm::ValueMap<edm::Ref<std::vector<Run3ScoutingTrack>>> >            (iConfig.getParameter<edm::InputTag>("trackRefs"))),    
   verticesToken            (consumes<std::vector<reco::Vertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),  
   beamspot_token(consumes<reco::BeamSpot>(iConfig.getParameter<edm::InputTag>("beamspot_src"))),
   GenParticleToken_(consumes(iConfig.getParameter<edm::InputTag>("genParticle_src"))),
   GeneratorToken_(consumes(iConfig.getParameter<edm::InputTag>("generatorName"))),
   token_builder(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
-  doL1                     (iConfig.existsAs<bool>("doL1")               ?    iConfig.getParameter<bool>  ("doL1")            : false),
+  doTrigger                     (iConfig.existsAs<bool>("doTrigger")               ?    iConfig.getParameter<bool>  ("doTrigger")            : false),
+  isScouting                     (iConfig.existsAs<bool>("isScouting")               ?    iConfig.getParameter<bool>  ("isScouting")            : false),
   doPhiCorrection          (iConfig.existsAs<bool>("doPhiCorrection")    ?    iConfig.getParameter<bool>  ("doPhiCorrection") : false),
   doGenMatching       (iConfig.existsAs<bool>("doGenMatching")   ?    iConfig.getParameter<bool>  ("doGenMatching") : false),
   luminosity          (iConfig.existsAs<double>("luminosity")    ?    iConfig.getParameter<double>  ("luminosity") : 1.0),
   crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0)
 {
     usesResource("TFileService");
-    if (doL1) {
+    if (doTrigger) {
         algInputTag_ = iConfig.getParameter<edm::InputTag>("AlgInputTag");
         extInputTag_ = iConfig.getParameter<edm::InputTag>("l1tExtBlkInputTag");
         algToken_ = consumes<BXVector<GlobalAlgBlk>>(algInputTag_);
@@ -591,10 +595,14 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   edm::Handle<std::vector<reco::Track>> ScoutingTrackHandle;
   //edm::Handle<std::vector<Run3ScoutingTrack>> ScoutingTrackHandle;
   iEvent.getByToken(tracksToken, ScoutingTrackHandle);
+
+  edm::Handle<edm::ValueMap<edm::Ref<std::vector<Run3ScoutingTrack>>>> ScoutingTrackRefHandle;
+  if(isScouting) iEvent.getByToken(tracksRefToken, ScoutingTrackRefHandle);
   
   auto const &tt_builder = iSetup.getData(token_builder);
   std::vector<reco::Track>::const_iterator scoutingTrackIter;
   //std::vector<Run3ScoutingTrack>::const_iterator scoutingTrackIter;
+  uint i_tk = 0;
   for(scoutingTrackIter = ScoutingTrackHandle->begin(); scoutingTrackIter != ScoutingTrackHandle->end(); ++scoutingTrackIter){
     scoutTrack_pt->push_back(scoutingTrackIter->pt());
     scoutTrack_eta->push_back(scoutingTrackIter->eta());
@@ -612,10 +620,18 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     float dz = scoutingTrackIter->dz(beamspot->position());
     scoutTrack_dz->push_back(dz);
     scoutTrack_dzSig->push_back(dz/scoutingTrackIter->dzError());
-    scoutTrack_nValidPixelHits->push_back(scoutingTrackIter->hitPattern().numberOfValidPixelHits());
-    scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutingTrackIter->hitPattern().trackerLayersWithMeasurement());
-    scoutTrack_nValidStripHits->push_back(scoutingTrackIter->hitPattern().numberOfValidStripHits());
-
+    edm::Ref<std::vector<reco::Track>> trackRef(ScoutingTrackHandle, i_tk);
+    if(isScouting){
+      auto scoutTrack = (*ScoutingTrackRefHandle)[trackRef];
+      scoutTrack_nValidPixelHits->push_back(scoutTrack->tk_nValidPixelHits());
+      scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutTrack->tk_nTrackerLayersWithMeasurement());
+      scoutTrack_nValidStripHits->push_back(scoutTrack->tk_nValidStripHits());
+    }
+    else{
+      scoutTrack_nValidPixelHits->push_back(scoutingTrackIter->hitPattern().numberOfValidPixelHits());
+      scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutingTrackIter->hitPattern().trackerLayersWithMeasurement());
+      scoutTrack_nValidStripHits->push_back(scoutingTrackIter->hitPattern().numberOfValidStripHits());
+    }
     float minPVDxy = 999999;
     float minPVDz = 999999;
     
@@ -627,6 +643,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     }
     scoutTrack_minPVDxy->push_back(minPVDxy);
     scoutTrack_minPVDz->push_back(minPVDz);
+    i_tk++;
   }
   
   //Get the jets
@@ -714,9 +731,17 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 	float dz = vertTrack->dz(beamspot->position());
 	vertTrack_dz->push_back(dz);
 	vertTrack_dzSig->push_back(dz/vertTrack->dzError());
-	vertTrack_nValidPixelHits->push_back(vertTrack->hitPattern().numberOfValidPixelHits());
-	vertTrack_nTrackerLayersWithMeasurement->push_back(vertTrack->hitPattern().trackerLayersWithMeasurement());
-	vertTrack_nValidStripHits->push_back(vertTrack->hitPattern().numberOfValidStripHits());
+	if(isScouting){
+	  auto scoutTrack = (*ScoutingTrackRefHandle)[vertTrack];
+	  vertTrack_nValidPixelHits->push_back(scoutTrack->tk_nValidPixelHits());
+	  vertTrack_nTrackerLayersWithMeasurement->push_back(scoutTrack->tk_nTrackerLayersWithMeasurement());
+	  vertTrack_nValidStripHits->push_back(scoutTrack->tk_nValidStripHits());
+	}
+	else{
+	  vertTrack_nValidPixelHits->push_back(vertTrack->hitPattern().numberOfValidPixelHits());
+	  vertTrack_nTrackerLayersWithMeasurement->push_back(vertTrack->hitPattern().trackerLayersWithMeasurement());
+	  vertTrack_nValidStripHits->push_back(vertTrack->hitPattern().numberOfValidStripHits());
+	}
       }
       ntk_t = tks_t.size();
       if (ntk_t > required_ntk - 1) vertices_ntk.push_back(v);
@@ -1114,35 +1139,54 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
   //L1 results
   l1Result_.clear();
-  if (doL1) {
-    l1GtUtils_->retrieveL1(iEvent,iSetup,algToken_);
-    for( unsigned int iseed = 0; iseed < l1Seeds_.size(); iseed++ ) {
-      bool l1htbit = 0;
-      l1GtUtils_->getFinalDecisionByName(string(l1Seeds_[iseed]), l1htbit);
-      l1Result_.push_back( l1htbit );
-    }
+  if (doTrigger) {
+    if(isScouting){
+      l1GtUtils_->retrieveL1(iEvent,iSetup,algToken_);
+      for( unsigned int iseed = 0; iseed < l1Seeds_.size(); iseed++ ) {
+	bool l1htbit = 0;
+	l1GtUtils_->getFinalDecisionByName(string(l1Seeds_[iseed]), l1htbit);
+	l1Result_.push_back( l1htbit );
+      }
       
-    l1GtUtils_->getFinalDecisionByName(string("L1_HTT200er"), L1_HTT200er);
-    l1GtUtils_->getFinalDecisionByName(string("L1_HTT255er"), L1_HTT255er);
-    l1GtUtils_->getFinalDecisionByName(string("L1_HTT280er"), L1_HTT280er);
-    l1GtUtils_->getFinalDecisionByName(string("L1_HTT320er"), L1_HTT320er);
-    l1GtUtils_->getFinalDecisionByName(string("L1_HTT360er"), L1_HTT360er);
-    l1GtUtils_->getFinalDecisionByName(string("L1_HTT400er"), L1_HTT400er);
-    l1GtUtils_->getFinalDecisionByName(string("L1_HTT450er"), L1_HTT450er);
-    l1GtUtils_->getFinalDecisionByName(string("L1_ETT2000"), L1_ETT2000);
-    l1GtUtils_->getFinalDecisionByName(string("L1_SingleJet180"), L1_SingleJet180);
-    l1GtUtils_->getFinalDecisionByName(string("L1_SingleJet200"), L1_SingleJet200);
-    l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5);
-    l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5);
-    l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5);
-    L1_FinalResult = L1_HTT280er || L1_ETT2000 || L1_SingleJet180 || L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5;
-    if(!L1_FinalResult) return;
+      l1GtUtils_->getFinalDecisionByName(string("L1_HTT200er"), L1_HTT200er);
+      l1GtUtils_->getFinalDecisionByName(string("L1_HTT255er"), L1_HTT255er);
+      l1GtUtils_->getFinalDecisionByName(string("L1_HTT280er"), L1_HTT280er);
+      l1GtUtils_->getFinalDecisionByName(string("L1_HTT320er"), L1_HTT320er);
+      l1GtUtils_->getFinalDecisionByName(string("L1_HTT360er"), L1_HTT360er);
+      l1GtUtils_->getFinalDecisionByName(string("L1_HTT400er"), L1_HTT400er);
+      l1GtUtils_->getFinalDecisionByName(string("L1_HTT450er"), L1_HTT450er);
+      l1GtUtils_->getFinalDecisionByName(string("L1_ETT2000"), L1_ETT2000);
+      l1GtUtils_->getFinalDecisionByName(string("L1_SingleJet180"), L1_SingleJet180);
+      l1GtUtils_->getFinalDecisionByName(string("L1_SingleJet200"), L1_SingleJet200);
+      l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5);
+      l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5);
+      l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5);
+      L1_FinalResult = L1_HTT280er || L1_ETT2000 || L1_SingleJet180 || L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5;
+      if(!L1_FinalResult) return;
+      
+      h_genWeights->Fill("Trigger",genWeight);
+      h_weights->Fill("Trigger",theWeight);
+      h_weightsSquared->Fill("Trigger",pow(theWeight,2));
+    }
+    else{
+      edm::Handle<edm::TriggerResults> triggerBits;
+      iEvent.getByToken(triggerResultsToken, triggerBits);
+      const edm::TriggerNames &names = iEvent.triggerNames(*triggerBits);
+      HLT_FinalResult = false;
+      for (unsigned int i = 0, n = triggerBits->size(); i < n; ++i) {
+	std::string name = names.triggerName(i);
+	if((name.find("HLT_PFHT330PT30_QuadPFJet_75_60_45_40_PNet3BTag_4p3_v")!=std::string::npos) || (name.find("HLT_PFHT1050_v")!=std::string::npos) ){
+	  if(triggerBits->accept(i)) HLT_FinalResult = true;
+	}
+      }
+      if(!HLT_FinalResult) return;
 
-    h_genWeights->Fill("L1",genWeight);
-    h_weights->Fill("L1",theWeight);
-    h_weightsSquared->Fill("L1",pow(theWeight,2));
+      h_genWeights->Fill("Trigger",genWeight);
+      h_weights->Fill("Trigger",theWeight);
+      h_weightsSquared->Fill("Trigger",pow(theWeight,2));
+    }
   }
-  
+
   tree->Fill();
   objectTree->Fill();
 }
@@ -1364,17 +1408,17 @@ void ScoutingTreeMakerRun3::beginJob() {
     h_genWeights->GetXaxis()->SetBinLabel(2,"nJets");
     h_genWeights->GetXaxis()->SetBinLabel(3,"nVertices");
     h_genWeights->GetXaxis()->SetBinLabel(4,"dBV");
-    h_genWeights->GetXaxis()->SetBinLabel(5,"L1");
+    h_genWeights->GetXaxis()->SetBinLabel(5,"Trigger");
     h_weights->GetXaxis()->SetBinLabel(1,"None");
     h_weights->GetXaxis()->SetBinLabel(2,"nJets");
     h_weights->GetXaxis()->SetBinLabel(3,"nVertices");
     h_weights->GetXaxis()->SetBinLabel(4,"dBV");
-    h_weights->GetXaxis()->SetBinLabel(5,"L1");
+    h_weights->GetXaxis()->SetBinLabel(5,"Trigger");
     h_weightsSquared->GetXaxis()->SetBinLabel(1,"None");
     h_weightsSquared->GetXaxis()->SetBinLabel(2,"nJets");
     h_weightsSquared->GetXaxis()->SetBinLabel(3,"nVertices");
     h_weightsSquared->GetXaxis()->SetBinLabel(4,"dBV");
-    h_weightsSquared->GetXaxis()->SetBinLabel(5,"L1");
+    h_weightsSquared->GetXaxis()->SetBinLabel(5,"Trigger");
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
