@@ -239,6 +239,7 @@ private:
   std::vector<int>* vertTrack_nValidPixelHits;
   std::vector<int>* vertTrack_nTrackerLayersWithMeasurement;
   std::vector<int>* vertTrack_nValidStripHits;
+  std::vector<int>* vertTrack_iVtx;
   
   std::vector<float>* match_ptRatio;
   std::vector<float>* match_deltaR;
@@ -534,6 +535,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   vertTrack_nValidPixelHits->clear();
   vertTrack_nTrackerLayersWithMeasurement->clear();
   vertTrack_nValidStripHits->clear();
+  vertTrack_iVtx->clear();
   
   match_deltaR->clear();
   match_ptRatio->clear();
@@ -714,6 +716,26 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     for (auto vertex_iter = verticesH->begin(); vertex_iter != verticesH->end(); ++vertex_iter) {
       v = verticesH->at(t);
       tks_t = vertex_track_vec(v);
+      ntk_t = tks_t.size();
+      if (ntk_t > required_ntk - 1) vertices_ntk.push_back(v);
+      t++;
+    }
+  
+    nVertices = vertices_ntk.size();
+
+    if (nVertices<1) return;
+    
+    h_genWeights->Fill("nVertices",genWeight);
+    h_weights->Fill("nVertices",theWeight);
+    h_weightsSquared->Fill("nVertices",pow(theWeight,2));
+  
+    h_scoutVert_nVertices->Fill(vertices_ntk.size());
+    scoutVert_nVertices = vertices_ntk.size();
+
+    t=0;
+    for (auto vertex_iter = vertices_ntk.begin(); vertex_iter != vertices_ntk.end(); ++vertex_iter) {
+      v = vertices_ntk.at(t);
+      tks_t = vertex_track_vec(v);
       for(auto vertTrack: tks_t){
 	vertTrack_pt->push_back(vertTrack->pt());
 	vertTrack_eta->push_back(vertTrack->eta());
@@ -731,6 +753,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 	float dz = vertTrack->dz(beamspot->position());
 	vertTrack_dz->push_back(dz);
 	vertTrack_dzSig->push_back(dz/vertTrack->dzError());
+	vertTrack_iVtx->push_back(t);
 	if(isScouting){
 	  auto scoutTrack = (*ScoutingTrackRefHandle)[vertTrack];
 	  vertTrack_nValidPixelHits->push_back(scoutTrack->tk_nValidPixelHits());
@@ -743,21 +766,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 	  vertTrack_nValidStripHits->push_back(vertTrack->hitPattern().numberOfValidStripHits());
 	}
       }
-      ntk_t = tks_t.size();
-      if (ntk_t > required_ntk - 1) vertices_ntk.push_back(v);
       t++;
     }
-  
-    nVertices = vertices_ntk.size();
-
-    if (nVertices<1) return;
-
-    h_genWeights->Fill("nVertices",genWeight);
-    h_weights->Fill("nVertices",theWeight);
-    h_weightsSquared->Fill("nVertices",pow(theWeight,2));
-  
-    h_scoutVert_nVertices->Fill(vertices_ntk.size());
-    scoutVert_nVertices = vertices_ntk.size();
   }
   
   std::vector<reco::GenParticle>::const_iterator genParticleIter;
@@ -1292,7 +1302,8 @@ void ScoutingTreeMakerRun3::beginJob() {
     vertTrack_dzSig = new std::vector<float>;
     vertTrack_nValidPixelHits = new std::vector<int>;
     vertTrack_nTrackerLayersWithMeasurement = new std::vector<int>;
-    vertTrack_nValidStripHits = new std::vector<int>; 
+    vertTrack_nValidStripHits = new std::vector<int>;
+    vertTrack_iVtx = new std::vector<int>; 
     
     match_ptRatio = new std::vector<float>;
     match_deltaR = new std::vector<float>;
@@ -1348,6 +1359,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("vertTrack_nValidPixelHits",&vertTrack_nValidPixelHits);
     objectTree->Branch("vertTrack_nTrackerLayersWithMeasurement",&vertTrack_nTrackerLayersWithMeasurement);
     objectTree->Branch("vertTrack_nValidStripHits",&vertTrack_nValidStripHits);
+    objectTree->Branch("vertTrack_iVtx",&vertTrack_iVtx);
     
     objectTree->Branch("scoutTrack_pt",&scoutTrack_pt);
     objectTree->Branch("scoutTrack_eta",&scoutTrack_eta);
@@ -1570,6 +1582,7 @@ void ScoutingTreeMakerRun3::endJob() {
   delete vertTrack_nValidPixelHits;
   delete vertTrack_nTrackerLayersWithMeasurement;
   delete vertTrack_nValidStripHits;
+  delete vertTrack_iVtx;
   
   delete match_ptRatio;
   delete match_deltaR;
