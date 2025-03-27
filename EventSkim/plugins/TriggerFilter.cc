@@ -144,43 +144,6 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   double theWeight = genWeight*luminosity*crossSection;
   h_weights->Fill("None",theWeight);
   h_weightsSquared->Fill("None",pow(theWeight,2));
-  
-  int nPFJets = -1;
-  //Get the jets
-  Handle<vector<Run3ScoutingPFJet> > pfjetsH;
-  iEvent.getByToken(pfjetsToken, pfjetsH);
-  std::vector<Run3ScoutingPFJet> pfJetVector;
-
-  //Require 4 PF Jets
-  if(pfjetsH.isValid()){
-    for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
-      if(jets_iter->pt() > 20){
-	pfJetVector.push_back(*jets_iter);
-      }
-    }
-    nPFJets = pfJetVector.size();
-  }
-
-  //Get the jets
-  Handle<vector<pat::Jet> > patjetsH;
-  iEvent.getByToken(patjetsToken, patjetsH);
-  std::vector<pat::Jet> patJetVector;
-
-  //Require 4 Pat Jets
-  if(patjetsH.isValid()){
-    for (auto jets_iter = patjetsH->begin(); jets_iter != patjetsH->end(); ++jets_iter) {
-      if(jets_iter->pt() > 20){
-	patJetVector.push_back(*jets_iter);
-      }
-    }
-    nPFJets = patJetVector.size();  
-  }
-  passFilter = passFilter && (nPFJets>3);
-  if(passFilter){
-    h_genWeights->Fill("nJets",genWeight);
-    h_weights->Fill("nJets",theWeight);
-    h_weightsSquared->Fill("nJets",pow(theWeight,2));
-  }
 
   bool passTrigger;
   if(isScouting){
@@ -216,6 +179,44 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     h_weightsSquared->Fill("Trigger",pow(theWeight,2));
   }
   
+  
+  int nPFJets = -1;
+  //Get the jets
+  Handle<vector<Run3ScoutingPFJet> > pfjetsH;
+  iEvent.getByToken(pfjetsToken, pfjetsH);
+  std::vector<Run3ScoutingPFJet> pfJetVector;
+
+  //Require 4 PF Jets
+  if(pfjetsH.isValid() && isScouting){
+    for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
+      if(jets_iter->pt() > 20){
+	pfJetVector.push_back(*jets_iter);
+      }
+    }
+    nPFJets = pfJetVector.size();
+  }
+
+  //Get the jets
+  Handle<vector<pat::Jet> > patjetsH;
+  iEvent.getByToken(patjetsToken, patjetsH);
+  std::vector<pat::Jet> patJetVector;
+
+  //Require 4 Pat Jets
+  if(patjetsH.isValid() && !isScouting){
+    for (auto jets_iter = patjetsH->begin(); jets_iter != patjetsH->end(); ++jets_iter) {
+      if(jets_iter->pt() > 20){
+	patJetVector.push_back(*jets_iter);
+      }
+    }
+    nPFJets = patJetVector.size();  
+  }
+  passFilter = passFilter && (nPFJets>3);
+  if(passFilter){
+    h_genWeights->Fill("nJets",genWeight);
+    h_weights->Fill("nJets",theWeight);
+    h_weightsSquared->Fill("nJets",pow(theWeight,2));
+  }
+  
   return passFilter;
 }
 
@@ -226,16 +227,19 @@ TriggerFilter::beginJob()
   edm::Service<TFileService> fs;
   h_genWeights = fs->make<TH1D>("genWeightsSkim",";Cut Applied; Sum of Gen Weights",3,0,3);
   h_genWeights->GetXaxis()->SetBinLabel(1,"None");
-  h_genWeights->GetXaxis()->SetBinLabel(2,"nJets");
-  h_genWeights->GetXaxis()->SetBinLabel(3,"Trigger");
+  h_genWeights->GetXaxis()->SetBinLabel(2,"Trigger");
+  h_genWeights->GetXaxis()->SetBinLabel(3,"nJets");
+  
   h_weights = fs->make<TH1D>("weightsSkim",";Cut Applied; Sum of Weights",3,0,3);
   h_weights->GetXaxis()->SetBinLabel(1,"None");
-  h_weights->GetXaxis()->SetBinLabel(2,"nJets");
-  h_weights->GetXaxis()->SetBinLabel(3,"Trigger");
+  h_weights->GetXaxis()->SetBinLabel(2,"Trigger");
+  h_weights->GetXaxis()->SetBinLabel(3,"nJets");
+  
   h_weightsSquared = fs->make<TH1D>("weightsSquaredSkim",";Cut Applied; Sum of Squared Weights",3,0,3);
   h_weightsSquared->GetXaxis()->SetBinLabel(1,"None");
-  h_weightsSquared->GetXaxis()->SetBinLabel(2,"nJets");
-  h_weightsSquared->GetXaxis()->SetBinLabel(3,"Trigger");
+  h_weightsSquared->GetXaxis()->SetBinLabel(2,"Trigger");
+  h_weightsSquared->GetXaxis()->SetBinLabel(3,"nJets");
+  
 }
 
 // ------------ method called once each job just after ending the event loop  ------------

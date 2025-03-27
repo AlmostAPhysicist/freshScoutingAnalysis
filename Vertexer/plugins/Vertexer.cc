@@ -82,7 +82,10 @@ private:
   void produce(edm::Event&, const edm::EventSetup&) override;
   void endStream() override;
 
-
+  const double pt_min_cut;
+  const double dxySig_min_cut;
+  const int npixelHits_min_cut;
+  const int ntrackerLayers_min_cut;
   const int n_tracks_per_seed_vertex;
   const double max_seed_vertex_chi2;
   const bool use_2d_vertex_dist;
@@ -199,6 +202,10 @@ private:
 
 Vertexer::Vertexer(edm::ParameterSet const& params)
   :
+  pt_min_cut(params.getParameter<double>("pt_min_cut")),
+  dxySig_min_cut(params.getParameter<double>("dxySig_min_cut")),
+  npixelHits_min_cut(params.getParameter<int>("npixelHits_min_cut")),
+  ntrackerLayers_min_cut(params.getParameter<int>("ntrackerLayers_min_cut")),
   n_tracks_per_seed_vertex(params.getParameter<int>("n_tracks_per_seed_vertex")),
   max_seed_vertex_chi2(params.getParameter<double>("max_seed_vertex_chi2")),
   use_2d_vertex_dist(params.getParameter<bool>("use_2d_vertex_dist")),
@@ -270,9 +277,9 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   for (size_t i_tk = 0; i_tk < seed_track_handle->size(); i_tk++){
     const edm::Ref<reco::TrackCollection> tk_ref(seed_track_handle, i_tk);
     reco::TransientTrack ttk = tt_builder.build(tk_ref);
-    std::pair<bool, Measurement1D> ttk_dist = track_dist(ttk, fake_bs_vtx);
+    std::pair<bool, Measurement1D> ttk_dist = IPTools::absoluteTransverseImpactParameter(ttk, fake_bs_vtx);
     float IP_sig = ttk_dist.second.significance();
-    if ((IP_sig > 4) && (tk_ref->pt()>0.9)) seed_track_refs.push_back(tk_ref);
+    if ((IP_sig > dxySig_min_cut) && (tk_ref->pt()>pt_min_cut) && (tk_ref->hitPattern().numberOfValidPixelHits() > npixelHits_min_cut) && (tk_ref->hitPattern().trackerLayersWithMeasurement() > ntrackerLayers_min_cut)) seed_track_refs.push_back(tk_ref);
     if (verbose) printf("Build track references. IP_sig = %f\n", IP_sig);
   }
   

@@ -222,6 +222,7 @@ private:
   std::vector<int>* scoutTrack_nValidPixelHits;
   std::vector<int>* scoutTrack_nTrackerLayersWithMeasurement;
   std::vector<int>* scoutTrack_nValidStripHits;
+  std::vector<int>* scoutTrack_nMissingInnerHits;
   std::vector<float>* scoutTrack_minPVDxy;
   std::vector<float>* scoutTrack_minPVDz;
 
@@ -239,6 +240,7 @@ private:
   std::vector<int>* vertTrack_nValidPixelHits;
   std::vector<int>* vertTrack_nTrackerLayersWithMeasurement;
   std::vector<int>* vertTrack_nValidStripHits;
+  std::vector<int>* vertTrack_nMissingInnerHits;
   std::vector<int>* vertTrack_iVtx;
   
   std::vector<float>* match_ptRatio;
@@ -277,11 +279,20 @@ private:
   std::vector<float>* scoutVert_x;
   std::vector<float>* scoutVert_y;
   std::vector<float>* scoutVert_nTracks;
+  std::vector<float>* scoutVert_chi2;
   std::vector<float>* scoutVert_dPhi;
   std::vector<float>* scoutVert_dVV;
   int scoutVert_nVertices;
   double weight;
+  int eventId;
+  int runNumber;
+  int lumiBlock;
 
+  std::vector<float>* jet_pt;
+  std::vector<float>* jet_eta;
+  std::vector<float>* jet_phi;
+  std::vector<float>* jet_mass;
+  
   TH1F* h_match_gen_dxy = new TH1F("match_gen_dxy",";Gen particle d_{xy} [cm]; Gen particles / 0.01 cm", 100, 0, 1);
   TH1F* h_gen_dxy = new TH1F("gen_dxy",";Gen particle d_{xy} [cm]; Gen particles / 0.01 cm", 100, 0, 1);
   TH2F* h_match_vert_x_y = new TH2F("match_vert_x_y","Vertex Position; X Position [cm] / 0.02 cm; Y Position [cm] / 0.02 cm", 100, -1, 1, 100, -1, 1);
@@ -518,6 +529,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   scoutTrack_nValidPixelHits->clear();
   scoutTrack_nTrackerLayersWithMeasurement->clear();
   scoutTrack_nValidStripHits->clear();
+  scoutTrack_nMissingInnerHits->clear();
   scoutTrack_minPVDxy->clear();
   scoutTrack_minPVDz->clear();
 
@@ -535,6 +547,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   vertTrack_nValidPixelHits->clear();
   vertTrack_nTrackerLayersWithMeasurement->clear();
   vertTrack_nValidStripHits->clear();
+  vertTrack_nMissingInnerHits->clear();
   vertTrack_iVtx->clear();
   
   match_deltaR->clear();
@@ -572,9 +585,19 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   scoutVert_x->clear();
   scoutVert_y->clear();
   scoutVert_nTracks->clear();
+  scoutVert_chi2->clear();
   scoutVert_dPhi->clear();
   scoutVert_dVV->clear();
 
+  jet_pt->clear();
+  jet_eta->clear();
+  jet_phi->clear();
+  jet_mass->clear();
+
+  eventId = iEvent.id().event();
+  runNumber = iEvent.id().run();
+  lumiBlock = iEvent.luminosityBlock();
+  
   edm::Handle<GenEventInfoProduct> generatorHandle;
   iEvent.getByToken(GeneratorToken_, generatorHandle);
   double genWeight = generatorHandle->weight();
@@ -634,6 +657,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutingTrackIter->hitPattern().trackerLayersWithMeasurement());
       scoutTrack_nValidStripHits->push_back(scoutingTrackIter->hitPattern().numberOfValidStripHits());
     }
+    scoutTrack_nMissingInnerHits->push_back(scoutingTrackIter->missingInnerHits());
+    
     float minPVDxy = 999999;
     float minPVDz = 999999;
     
@@ -654,7 +679,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   std::vector<Run3ScoutingPFJet> pfJetVector;
   
   //Require 4 PF Jets
-  if(pfjetsH.isValid()){
+  if(pfjetsH.isValid() && isScouting){
     for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
       if(jets_iter->pt() > 20){
 	pfJetVector.push_back(*jets_iter);
@@ -670,6 +695,10 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     HT = 0;
     int t = 0;
     for (auto jet: pfJetVector) {
+      jet_pt->push_back(jet.pt());
+      jet_eta->push_back(jet.eta());
+      jet_phi->push_back(jet.phi());
+      jet_mass->push_back(jet.m());
       HT = HT + jet.pt();
       t++;
     }
@@ -681,7 +710,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   std::vector<pat::Jet> patJetVector;
 
   //Require 4 Pat Jets
-  if(patjetsH.isValid()){
+  if(patjetsH.isValid() && !isScouting){
     for (auto jets_iter = patjetsH->begin(); jets_iter != patjetsH->end(); ++jets_iter) {
       if(jets_iter->pt() > 20){
 	patJetVector.push_back(*jets_iter);
@@ -697,6 +726,10 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     HT = 0;
     int t = 0;
     for (auto jet: patJetVector) {
+      jet_pt->push_back(jet.pt());
+      jet_eta->push_back(jet.eta());
+      jet_phi->push_back(jet.phi());
+      jet_mass->push_back(jet.mass());
       HT = HT + jet.pt();
       t++;
     }
@@ -765,6 +798,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 	  vertTrack_nTrackerLayersWithMeasurement->push_back(vertTrack->hitPattern().trackerLayersWithMeasurement());
 	  vertTrack_nValidStripHits->push_back(vertTrack->hitPattern().numberOfValidStripHits());
 	}
+	vertTrack_nMissingInnerHits->push_back(vertTrack->missingInnerHits());
       }
       t++;
     }
@@ -972,6 +1006,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     scoutVert_y->push_back(v.y()-beamspot->y0());
     h_scoutVert_nTracks->Fill(trks.size());
     scoutVert_nTracks->push_back(trks.size());
+    scoutVert_chi2->push_back(v.normalizedChi2());
 
     if(doGenMatching){
       int i_trk = -1;
@@ -1270,7 +1305,6 @@ void ScoutingTreeMakerRun3::beginJob() {
     tree->Branch("genScoutVert_nMatches"              , &genScoutVert_nMatches                      , "genScoutVert_nMatches/I"      );
     tree->Branch("genVert_nVertices", &genVert_nVertices, "genVert_nVertices/I");
     tree->Branch("scoutVert_nVertices", &scoutVert_nVertices, "scoutVert_nVertices/I");
-    tree->Branch("weight", &weight, "weight/D");
 
     scoutTrack_pt = new std::vector<float>;
     scoutTrack_eta = new std::vector<float>;
@@ -1286,6 +1320,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     scoutTrack_nValidPixelHits = new std::vector<int>;
     scoutTrack_nTrackerLayersWithMeasurement = new std::vector<int>;
     scoutTrack_nValidStripHits = new std::vector<int>;
+    scoutTrack_nMissingInnerHits = new std::vector<int>;
     scoutTrack_minPVDxy = new std::vector<float>;
     scoutTrack_minPVDz = new std::vector<float>;
 
@@ -1303,6 +1338,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     vertTrack_nValidPixelHits = new std::vector<int>;
     vertTrack_nTrackerLayersWithMeasurement = new std::vector<int>;
     vertTrack_nValidStripHits = new std::vector<int>;
+    vertTrack_nMissingInnerHits = new std::vector<int>;
     vertTrack_iVtx = new std::vector<int>; 
     
     match_ptRatio = new std::vector<float>;
@@ -1340,8 +1376,14 @@ void ScoutingTreeMakerRun3::beginJob() {
     scoutVert_x = new std::vector<float>;
     scoutVert_y = new std::vector<float>;
     scoutVert_nTracks = new std::vector<float>;
+    scoutVert_chi2 = new std::vector<float>;
     scoutVert_dPhi = new std::vector<float>;
     scoutVert_dVV = new std::vector<float>;
+
+    jet_pt = new std::vector<float>;
+    jet_eta = new std::vector<float>;
+    jet_phi = new std::vector<float>;
+    jet_mass = new std::vector<float>;
     
     objectTree = fs->make<TTree>("objectTree","objectTree");
     //std::cout<<"objectTree directory beginJob "<<objectTree->GetDirectory()->GetPath()<<std::endl;
@@ -1359,6 +1401,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("vertTrack_nValidPixelHits",&vertTrack_nValidPixelHits);
     objectTree->Branch("vertTrack_nTrackerLayersWithMeasurement",&vertTrack_nTrackerLayersWithMeasurement);
     objectTree->Branch("vertTrack_nValidStripHits",&vertTrack_nValidStripHits);
+    objectTree->Branch("vertTrack_nMissingInnerHits",&vertTrack_nMissingInnerHits);
     objectTree->Branch("vertTrack_iVtx",&vertTrack_iVtx);
     
     objectTree->Branch("scoutTrack_pt",&scoutTrack_pt);
@@ -1375,6 +1418,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutTrack_nValidPixelHits",&scoutTrack_nValidPixelHits);
     objectTree->Branch("scoutTrack_nTrackerLayersWithMeasurement",&scoutTrack_nTrackerLayersWithMeasurement);
     objectTree->Branch("scoutTrack_nValidStripHits",&scoutTrack_nValidStripHits);
+    objectTree->Branch("scoutTrack_nMissingInnerHits",&scoutTrack_nMissingInnerHits);
     objectTree->Branch("scoutTrack_minPVDxy",&scoutTrack_minPVDxy);
     objectTree->Branch("scoutTrack_minPVDz",&scoutTrack_minPVDz);
     
@@ -1413,8 +1457,17 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutVert_x",&scoutVert_x);
     objectTree->Branch("scoutVert_y",&scoutVert_y);
     objectTree->Branch("scoutVert_nTracks",&scoutVert_nTracks);
+    objectTree->Branch("scoutVert_chi2",&scoutVert_chi2);
     objectTree->Branch("scoutVert_dPhi",&scoutVert_dPhi);
     objectTree->Branch("scoutVert_dVV",&scoutVert_dVV);
+    objectTree->Branch("weight", &weight, "weight/D");
+    objectTree->Branch("eventId", &eventId, "eventId/I");
+    objectTree->Branch("runNumber", &runNumber, "runNumber/I");
+    objectTree->Branch("lumiBlock", &lumiBlock, "lumiBlock/I");
+    objectTree->Branch("jet_pt",&jet_pt);
+    objectTree->Branch("jet_eta",&jet_eta);
+    objectTree->Branch("jet_phi",&jet_phi);
+    objectTree->Branch("jet_mass",&jet_mass);
 
     h_genWeights->GetXaxis()->SetBinLabel(1,"None");
     h_genWeights->GetXaxis()->SetBinLabel(2,"nJets");
@@ -1565,6 +1618,7 @@ void ScoutingTreeMakerRun3::endJob() {
   delete scoutTrack_nValidPixelHits;
   delete scoutTrack_nTrackerLayersWithMeasurement;
   delete scoutTrack_nValidStripHits;
+  delete scoutTrack_nMissingInnerHits;
   delete scoutTrack_minPVDxy;
   delete scoutTrack_minPVDz;
 
@@ -1582,6 +1636,7 @@ void ScoutingTreeMakerRun3::endJob() {
   delete vertTrack_nValidPixelHits;
   delete vertTrack_nTrackerLayersWithMeasurement;
   delete vertTrack_nValidStripHits;
+  delete vertTrack_nMissingInnerHits;
   delete vertTrack_iVtx;
   
   delete match_ptRatio;
@@ -1619,8 +1674,14 @@ void ScoutingTreeMakerRun3::endJob() {
   delete scoutVert_x;
   delete scoutVert_y;
   delete scoutVert_nTracks;
+  delete scoutVert_chi2;
   delete scoutVert_dPhi;
   delete scoutVert_dVV;
+
+  delete jet_pt;
+  delete jet_eta;
+  delete jet_phi;
+  delete jet_mass;
 }
 
 // ------------ method fills 'descriptions' with the allowed parameters for the module  ------------

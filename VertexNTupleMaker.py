@@ -37,6 +37,7 @@ process.source = cms.Source("PoolSource",
     # Test file generated on CMSSW 13.3.0
     fileNames = cms.untracked.vstring(
         #'file:/afs/cern.ch/work/r/rmccarth/private/MiniAODSIM_QCD-HT_1500to2000.root'
+        #'file:/afs/cern.ch/work/r/rmccarth/private/TTto4Q_MiniAOD.root'
     )
 )
 
@@ -62,6 +63,7 @@ if(options.isScouting):
     #unpacker
     scoutingTrackTag = cms.InputTag('hltScoutingTrackPacker')
     scoutingPVTag = cms.InputTag("hltScoutingPrimaryVertexPacker","primaryVtx")
+    scoutingPFTag = cms.InputTag("hltScoutingPFPacker")
     pfCandTag = cms.InputTag("")
     lostTrackTag = cms.InputTag("")
 
@@ -73,6 +75,7 @@ else:
     #unpacker
     scoutingTrackTag = cms.InputTag("")
     scoutingPVTag = cms.InputTag("")
+    scoutingPFTag = cms.InputTag("")
     pfCandTag = cms.InputTag("packedPFCandidates")
     lostTrackTag = cms.InputTag("lostTracks")
 
@@ -85,6 +88,7 @@ else:
 process.hltScoutingUnpackProducer = cms.EDProducer('HLTScoutingUnpackProducer',
   scoutingTrack = scoutingTrackTag,
   scoutingPrimaryVertex = scoutingPVTag,
+  scoutingParticle = scoutingPFTag,
   pfCand = pfCandTag,
   lostTrack = lostTrackTag,
   isScouting = cms.bool(options.isScouting),
@@ -110,6 +114,10 @@ process.triggerFilter = cms.EDFilter('TriggerFilter',
 
 process.Vertexer = cms.EDProducer('Vertexer',
                                   seed_tracks_src = cms.InputTag('hltScoutingUnpackProducer', 'Track'),
+                                  pt_min_cut = cms.double(1.1),
+                                  dxySig_min_cut = cms.double(8.0),
+                                  npixelHits_min_cut = cms.int32(1),
+                                  ntrackerLayers_min_cut = cms.int32(6),
                                   #kvr_params = kvr_params,
                                   #do_track_refinement = cms.bool(False), # remove tracks + trim out tracks with IP significance larger than trackrefine_sigmacut and trackrefine_trimmax, respectively
                                   resolve_split_vertices_loose = cms.bool(False), # an alternative merging routine with `loose` criteria, to merge any nearby vertices within a given dist or significance

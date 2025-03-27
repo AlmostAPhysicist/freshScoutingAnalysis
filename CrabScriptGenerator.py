@@ -22,8 +22,8 @@ inputDatasets = ["/QCD-4Jets_Bin-HT-200to400_TuneCP5_13p6TeV_madgraphMLM-pythia8
                  "/StopStopbarTo2Dbar2D_M-800_CTau-3mm_Summer24_100k_v2/brlopesd-StopStopbarTo2Dbar2D_M-800_CTau-3mm_Summer24_100k_miniAOD_v2-df1e99b50d14b85be33e7e4ab518ee3a/USER"]
 
 crossSections = [1961000000, 95620000, 13540000, 3033000, 883700, 383500, 125200, 26490, 762100, 762100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-tagSuffix = "v8Reco"
-scouting = False
+tagSuffix = "v11Scout10TrackFPR"
+scouting = True
 
 for i in range(len(inputDatasets)):
     dataset = inputDatasets[i]
@@ -52,12 +52,12 @@ config.Data.publication = False \n
 config.JobType.pyCfgParams = ['isScouting={scouting}','lumi=108.96','crossSection={crossSection}']
 config.Data.outputDatasetTag = theTag \n
 config.Data.outLFNDirBase = '/store/group/phys_exotica/DVScouting' \n
-config.Site.storageSite = 'T2_CH_CERN'""" 
-
-
+config.Site.storageSite = 'T2_CH_CERN' \n""" 
 
     # Write to a temporary file
     if "Stop" in dataset:
+        string += """config.Site.whitelist = ['T2_CH_CERN'] \n
+config.Data.ignoreLocality = True"""
         with open("crabSubmitScripts/"+dataset[1:].split("_Summer24")[0]+"_crabConfig.py", "w") as f:
             f.write(string)
     else:
