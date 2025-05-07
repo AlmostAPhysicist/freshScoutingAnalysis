@@ -111,7 +111,9 @@ private:
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> token_builder;
 
   edm::EDPutTokenT<reco::VertexCollection> putToken_;
-
+  edm::EDPutTokenT<edm::ValueMap<std::pair<float,float>>> vertexShiftZToken_;
+  edm::EDPutTokenT<edm::ValueMap<std::pair<float,float>>> vertexShift3DToken_;
+  
   // ----------member data ---------------------------
 
   VertexDistanceXY vertex_dist_2d;
@@ -230,7 +232,10 @@ Vertexer::Vertexer(edm::ParameterSet const& params)
   seed_tracks_token_(consumes(params.getParameter<edm::InputTag>("seed_tracks_src"))),
   token_builder(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
 
-  putToken_{produces()} {}
+  putToken_{produces()} {
+  vertexShiftZToken_ = produces<edm::ValueMap<std::pair<float,float>>>("vtxZShift");
+  vertexShift3DToken_ = produces<edm::ValueMap<std::pair<float,float>>>("vtx3DShift");
+}
 
 
 Vertexer::~Vertexer() {}
@@ -273,13 +278,19 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
   // Build the references to the tracks
   std::vector<reco::TrackRef> seed_track_refs;
+  std::map<reco::TrackRef, size_t> seed_track_index_map;
   
   for (size_t i_tk = 0; i_tk < seed_track_handle->size(); i_tk++){
     const edm::Ref<reco::TrackCollection> tk_ref(seed_track_handle, i_tk);
     reco::TransientTrack ttk = tt_builder.build(tk_ref);
     std::pair<bool, Measurement1D> ttk_dist = IPTools::absoluteTransverseImpactParameter(ttk, fake_bs_vtx);
+    //std::pair<bool, Measurement1D> ttk_dist = track_dist(ttk, fake_bs_vtx);
     float IP_sig = ttk_dist.second.significance();
-    if ((IP_sig > dxySig_min_cut) && (tk_ref->pt()>pt_min_cut) && (tk_ref->hitPattern().numberOfValidPixelHits() > npixelHits_min_cut) && (tk_ref->hitPattern().trackerLayersWithMeasurement() > ntrackerLayers_min_cut)) seed_track_refs.push_back(tk_ref);
+    if ((IP_sig > dxySig_min_cut) && (tk_ref->pt()>pt_min_cut) && (tk_ref->hitPattern().numberOfValidPixelHits() > npixelHits_min_cut) && (tk_ref->hitPattern().trackerLayersWithMeasurement() > ntrackerLayers_min_cut)){
+      seed_track_refs.push_back(tk_ref);
+      seed_track_index_map[tk_ref] = i_tk;
+    }
+    //if ((IP_sig > 4) && (tk_ref->pt()>0.9)) seed_track_refs.push_back(tk_ref);
     if (verbose) printf("Build track references. IP_sig = %f\n", IP_sig);
   }
   
@@ -292,7 +303,9 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     seed_tracks.push_back(tt_builder.build(tk));
     seed_track_ref_map[tk] = seed_tracks.size() - 1;
   }
-  
+
+  std::vector<std::pair<float,float>> shiftZVec(seed_track_handle->size(),std::make_pair(-999.0,-999.0));
+  std::vector<std::pair<float,float>> shift3DVec(seed_track_handle->size(),std::make_pair(-999.0,-999.0));
 
   //////////////////////////////////////////////////////////////////////
   // Form seed vertices from all pairs of tracks whose vertex fit
@@ -302,9 +315,20 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   const size_t ntk = seed_tracks.size();
   
   std::unique_ptr<reco::VertexCollection> vertices(new reco::VertexCollection);
+  auto outMapZ = std::make_unique<edm::ValueMap<std::pair<float,float>>>();
+  edm::ValueMap<std::pair<float,float>>::Filler fillerZ(*outMapZ);
+
+  auto outMap3D = std::make_unique<edm::ValueMap<std::pair<float,float>>>();
+  edm::ValueMap<std::pair<float,float>>::Filler filler3D(*outMap3D);
   
   if (ntk == 0) {
     iEvent.emplace(putToken_, std::move(*vertices));
+    fillerZ.insert(seed_track_handle, shiftZVec.begin(), shiftZVec.end());
+    fillerZ.fill();
+    iEvent.put( std::move(outMapZ), "vtxZShift" );
+    filler3D.insert(seed_track_handle, shift3DVec.begin(), shift3DVec.end());
+    filler3D.fill();
+    iEvent.put( std::move(outMap3D), "vtx3DShift" );
     return;
   }  
 
@@ -662,6 +686,19 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
         reco::Vertex vnm1(TransientVertex(kv_reco.vertex(ttks)));
         const double dist3_2 = (vnm1.x() - v[0]->x())*(vnm1.x() - v[0]->x()) + (vnm1.y() - v[0]->y())*(vnm1.y() - v[0]->y()) + (vnm1.z() - v[0]->z())*(vnm1.z() - v[0]->z());
         const double distz = sqrt( (vnm1.z() - v[0]->z()) * (vnm1.z() - v[0]->z()) );
+	shiftZVec[seed_track_index_map[tks[i]]] = std::make_pair(distz,(distz/sqrt(fabs(vnm1.covariance(2,2)-v[0]->covariance(2,2)))));
+	AlgebraicVector3 vDiff;
+	vDiff[0] = (vnm1.x() - v[0]->x())/sqrt(dist3_2);
+	vDiff[1] = (vnm1.y() - v[0]->y())/sqrt(dist3_2);
+	vDiff[2] = (vnm1.z() - v[0]->z())/sqrt(dist3_2);
+	//AlgebraicSymMatrix33 error = fabs(vnm1.covariance()-v[0]->covariance());
+	AlgebraicSymMatrix33 error1 = vnm1.covariance();
+	AlgebraicSymMatrix33 error2 = v[0]->covariance();
+	//double err2 = ROOT::Math::Similarity(error, vDiff);
+	double err1_2 = ROOT::Math::Similarity(error1, vDiff);
+	double err2_2 = ROOT::Math::Similarity(error2, vDiff);
+	//shift3DVec[seed_track_index_map[tks[i]]] = std::make_pair(sqrt(dist3_2),sqrt(err2));
+	shift3DVec[seed_track_index_map[tks[i]]] = std::make_pair(sqrt(dist3_2),sqrt(fabs(err1_2-err2_2)));
 
         if (vnm1.chi2() < 0 ||
             (max_nm1_refit_dist3 > 0 && dist3_2 > pow(max_nm1_refit_dist3, 2)) ||
@@ -770,7 +807,12 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   
   //Save the vertices
   iEvent.emplace(putToken_, std::move(*vertices));
-
+  fillerZ.insert(seed_track_handle, shiftZVec.begin(), shiftZVec.end());
+  fillerZ.fill();
+  iEvent.put( std::move(outMapZ), "vtxZShift" );
+  filler3D.insert(seed_track_handle, shift3DVec.begin(), shift3DVec.end());
+  filler3D.fill();
+  iEvent.put( std::move(outMap3D), "vtx3DShift" );
 }
 
 // ------------ method called once each stream before processing any runs, lumis or events  ------------

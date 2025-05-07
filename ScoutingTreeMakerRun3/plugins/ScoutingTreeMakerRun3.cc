@@ -95,7 +95,7 @@ public:
   ~ScoutingTreeMakerRun3() override;
 
   static void fillDescriptions(edm::ConfigurationDescriptions& descriptions);
-
+  using Run3ScoutingParticleCollection = std::vector<Run3ScoutingParticle>;
 private:
   void beginJob() override;
   void analyze(const edm::Event&, const edm::EventSetup&) override;
@@ -120,13 +120,16 @@ private:
   //const edm::EDGetTokenT<std::vector<Run3ScoutingTrack> >  tracksToken;
   const edm::EDGetTokenT<std::vector<reco::Track> >  tracksToken;
   const edm::EDGetTokenT<edm::ValueMap<edm::Ref<std::vector<Run3ScoutingTrack>>> >  tracksRefToken;
+  const edm::EDGetTokenT<edm::ValueMap<std::pair<float,float>> >  vertexShiftZToken;
+  const edm::EDGetTokenT<edm::ValueMap<std::pair<float,float>> >  vertexShift3DToken;
   const edm::EDGetTokenT<std::vector<reco::Vertex> >  verticesToken;
 
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::GenParticle>> GenParticleToken_;
   const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> token_builder;
-    
+  const edm::EDGetTokenT<Run3ScoutingParticleCollection> scoutingParticle_collection_token_;
+  
   std::vector<std::string> triggerPathsVector;
   std::map<std::string, int> triggerPathsMap;
 
@@ -211,6 +214,7 @@ private:
   std::vector<float>* scoutTrack_pt;
   std::vector<float>* scoutTrack_eta;
   std::vector<float>* scoutTrack_phi;
+  std::vector<float>* scoutTrack_phiBeamspot;
   std::vector<float>* scoutTrack_reducedChi2;
   std::vector<float>* scoutTrack_charge;
   std::vector<float>* scoutTrack_dxy;
@@ -219,6 +223,8 @@ private:
   std::vector<float>* scoutTrack_d3DSig;
   std::vector<float>* scoutTrack_dz;
   std::vector<float>* scoutTrack_dzSig;
+  std::vector<float>* scoutTrack_vx;
+  std::vector<float>* scoutTrack_vy;
   std::vector<int>* scoutTrack_nValidPixelHits;
   std::vector<int>* scoutTrack_nTrackerLayersWithMeasurement;
   std::vector<int>* scoutTrack_nValidStripHits;
@@ -242,6 +248,12 @@ private:
   std::vector<int>* vertTrack_nValidStripHits;
   std::vector<int>* vertTrack_nMissingInnerHits;
   std::vector<int>* vertTrack_iVtx;
+  std::vector<float>* vertTrack_shiftZValue;
+  std::vector<float>* vertTrack_shift3DValue;
+  std::vector<float>* vertTrack_shiftZSig;
+  std::vector<float>* vertTrack_shift3DSig;
+  //std::vector<int>* vertTrack_iJet;
+  std::vector<bool>* vertTrack_hasPFMatch;
   
   std::vector<float>* match_ptRatio;
   std::vector<float>* match_deltaR;
@@ -284,6 +296,8 @@ private:
   std::vector<float>* scoutVert_dVV;
   int scoutVert_nVertices;
   double weight;
+  float beamspot_x;
+  float beamspot_y;
   int eventId;
   int runNumber;
   int lumiBlock;
@@ -325,6 +339,35 @@ private:
   typedef std::vector<reco::TrackRef> track_vec;
   
   static bool CompareDeltaR(std::vector<float> a, std::vector<float> b) { return a[2] < b[2]; }
+
+  int findCompatibleScoutingTrack(edm::Handle<Run3ScoutingParticleCollection> const& scoutingParticleCollection, edm::Ref<std::vector<Run3ScoutingTrack> > scoutingTrack) {
+    int index = 0;
+    auto is_close = [](float a, float b, float relative_tolerance) -> bool {
+      return fabs(a-b) <= relative_tolerance * fmax(fabs(a), fabs(b));
+    };
+    for (size_t pf_index = 0; pf_index < scoutingParticleCollection->size(); pf_index++) {
+      auto & scoutingPFCandidate = scoutingParticleCollection->at(pf_index);
+      // retrieve track parameters from PFCandidate
+      float pt = scoutingPFCandidate.trk_pt();
+      float eta = scoutingPFCandidate.trk_eta();
+      float phi = scoutingPFCandidate.trk_phi();
+      if (scoutingPFCandidate.relative_trk_vars()){
+	pt += scoutingPFCandidate.pt();
+	eta += scoutingPFCandidate.eta();
+	phi += scoutingPFCandidate.phi();
+      }
+      float normchi2 = scoutingPFCandidate.normchi2();
+      if (is_close(normchi2, scoutingTrack->tk_chi2()/scoutingTrack->tk_ndof(), 0.001)
+	  && is_close(pt, scoutingTrack->tk_pt(), 0.000001)
+	  && is_close(eta, scoutingTrack->tk_eta(), 0.000001)
+	  && is_close(phi, scoutingTrack->tk_phi(), 0.000001)
+	  ) {
+	return index;
+      }
+      index++;
+    }
+    return -1;
+  }
   
   std::pair<bool,GlobalPoint> isStopDecay(const reco::Candidate* part){
     if(fabs(part->pdgId())==1000006 && part->numberOfDaughters()==2){
@@ -470,12 +513,15 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   patjetsToken              (consumes<std::vector<pat::Jet> >            (iConfig.getParameter<edm::InputTag>("patjets"))),
   //tracksToken              (consumes<std::vector<Run3ScoutingTrack> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
   tracksToken              (consumes<std::vector<reco::Track> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
-  tracksRefToken              (consumes<edm::ValueMap<edm::Ref<std::vector<Run3ScoutingTrack>>> >            (iConfig.getParameter<edm::InputTag>("trackRefs"))),    
+  tracksRefToken              (consumes<edm::ValueMap<edm::Ref<std::vector<Run3ScoutingTrack>>> >            (iConfig.getParameter<edm::InputTag>("trackRefs"))),
+  vertexShiftZToken              (consumes<edm::ValueMap<std::pair<float,float>>>            (iConfig.getParameter<edm::InputTag>("vertexShiftZMap"))),
+  vertexShift3DToken              (consumes<edm::ValueMap<std::pair<float,float>>>            (iConfig.getParameter<edm::InputTag>("vertexShift3DMap"))),
   verticesToken            (consumes<std::vector<reco::Vertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),  
   beamspot_token(consumes<reco::BeamSpot>(iConfig.getParameter<edm::InputTag>("beamspot_src"))),
   GenParticleToken_(consumes(iConfig.getParameter<edm::InputTag>("genParticle_src"))),
   GeneratorToken_(consumes(iConfig.getParameter<edm::InputTag>("generatorName"))),
   token_builder(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
+  scoutingParticle_collection_token_(consumes(iConfig.getParameter<edm::InputTag>("scoutingParticle"))),
   doTrigger                     (iConfig.existsAs<bool>("doTrigger")               ?    iConfig.getParameter<bool>  ("doTrigger")            : false),
   isScouting                     (iConfig.existsAs<bool>("isScouting")               ?    iConfig.getParameter<bool>  ("isScouting")            : false),
   doPhiCorrection          (iConfig.existsAs<bool>("doPhiCorrection")    ?    iConfig.getParameter<bool>  ("doPhiCorrection") : false),
@@ -518,6 +564,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   scoutTrack_pt->clear();
   scoutTrack_eta->clear();
   scoutTrack_phi->clear();
+  scoutTrack_phiBeamspot->clear();
   scoutTrack_reducedChi2->clear();
   scoutTrack_charge->clear();
   scoutTrack_dxy->clear();
@@ -526,6 +573,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   scoutTrack_d3DSig->clear();
   scoutTrack_dz->clear();
   scoutTrack_dzSig->clear();
+  scoutTrack_vx->clear();
+  scoutTrack_vy->clear();
   scoutTrack_nValidPixelHits->clear();
   scoutTrack_nTrackerLayersWithMeasurement->clear();
   scoutTrack_nValidStripHits->clear();
@@ -549,6 +598,12 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   vertTrack_nValidStripHits->clear();
   vertTrack_nMissingInnerHits->clear();
   vertTrack_iVtx->clear();
+  vertTrack_shiftZValue->clear();
+  vertTrack_shift3DValue->clear();
+  vertTrack_shiftZSig->clear();
+  vertTrack_shift3DSig->clear();
+  //vertTrack_iJet->clear();
+  vertTrack_hasPFMatch->clear();
   
   match_deltaR->clear();
   match_ptRatio->clear();
@@ -611,7 +666,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   edm::Handle<reco::BeamSpot> beamspot;
   iEvent.getByToken(beamspot_token, beamspot);
   const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
-
+  beamspot_x = beamspot->x0();
+  beamspot_y = beamspot->y0();
+  //std::cout<<"beamspot: "<<beamspot->position()<<std::endl;
   //Get the primary vertices
   edm::Handle<std::vector<reco::Vertex>> primaryVertices;
   iEvent.getByToken(primaryVerticesToken, primaryVertices);
@@ -623,6 +680,12 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
   edm::Handle<edm::ValueMap<edm::Ref<std::vector<Run3ScoutingTrack>>>> ScoutingTrackRefHandle;
   if(isScouting) iEvent.getByToken(tracksRefToken, ScoutingTrackRefHandle);
+
+  edm::Handle<edm::ValueMap<std::pair<float,float>>> shiftZMap;
+  iEvent.getByToken(  vertexShiftZToken, shiftZMap );
+
+  edm::Handle<edm::ValueMap<std::pair<float,float>>> shift3DMap;
+  iEvent.getByToken(  vertexShift3DToken, shift3DMap );
   
   auto const &tt_builder = iSetup.getData(token_builder);
   std::vector<reco::Track>::const_iterator scoutingTrackIter;
@@ -632,6 +695,10 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     scoutTrack_pt->push_back(scoutingTrackIter->pt());
     scoutTrack_eta->push_back(scoutingTrackIter->eta());
     scoutTrack_phi->push_back(scoutingTrackIter->phi());
+    scoutTrack_phiBeamspot->push_back(atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0()));
+    //std::cout<<"track phi: "<<scoutingTrackIter->phi()<<std::endl;
+    //std::cout<<"recalc origin phi: "<<atan2(scoutingTrackIter->py(),scoutingTrackIter->px())<<std::endl;
+    //std::cout<<"recalc beamspot phi: "<<atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0())<<std::endl;
     scoutTrack_reducedChi2->push_back(scoutingTrackIter->chi2()/scoutingTrackIter->ndof());
     scoutTrack_charge->push_back(scoutingTrackIter->charge());
     reco::TransientTrack transientScoutTrack = tt_builder.build(*scoutingTrackIter);
@@ -645,6 +712,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     float dz = scoutingTrackIter->dz(beamspot->position());
     scoutTrack_dz->push_back(dz);
     scoutTrack_dzSig->push_back(dz/scoutingTrackIter->dzError());
+    scoutTrack_vx->push_back(scoutingTrackIter->vx());
+    scoutTrack_vy->push_back(scoutingTrackIter->vy());
     edm::Ref<std::vector<reco::Track>> trackRef(ScoutingTrackHandle, i_tk);
     if(isScouting){
       auto scoutTrack = (*ScoutingTrackRefHandle)[trackRef];
@@ -734,6 +803,10 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       t++;
     }
   }
+
+  //Get scouting particle flow candidates
+  Handle<Run3ScoutingParticleCollection> scoutingParticle_collection_handle;
+  iEvent.getByToken(scoutingParticle_collection_token_, scoutingParticle_collection_handle);
   
   //Get the vertices
   Handle<vector<Vertex> > verticesH;
@@ -787,11 +860,35 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 	vertTrack_dz->push_back(dz);
 	vertTrack_dzSig->push_back(dz/vertTrack->dzError());
 	vertTrack_iVtx->push_back(t);
+	std::pair<float,float> shift = (*shiftZMap)[vertTrack];
+	vertTrack_shiftZValue->push_back(shift.first);
+	vertTrack_shiftZSig->push_back(shift.second);
+	shift = (*shift3DMap)[vertTrack];
+	vertTrack_shift3DValue->push_back(shift.first);
+	vertTrack_shift3DSig->push_back(shift.second);
 	if(isScouting){
 	  auto scoutTrack = (*ScoutingTrackRefHandle)[vertTrack];
 	  vertTrack_nValidPixelHits->push_back(scoutTrack->tk_nValidPixelHits());
 	  vertTrack_nTrackerLayersWithMeasurement->push_back(scoutTrack->tk_nTrackerLayersWithMeasurement());
 	  vertTrack_nValidStripHits->push_back(scoutTrack->tk_nValidStripHits());
+	  int match_index = findCompatibleScoutingTrack(scoutingParticle_collection_handle, scoutTrack);
+	  vertTrack_hasPFMatch->push_back(match_index!=-1);
+	  /*
+	  int i_jet = 0;
+	  for (auto jet: pfJetVector) {
+	    std::vector<int> jetConstituents = jet.constituents();
+	    std::cout<<"jet constituents: ";
+	    for (auto index: jetConstituents){
+	      std::cout<<index<<" ";
+	    }
+	    std::cout<<std::endl;
+	    if(std::find(jetConstituents.begin(), jetConstituents.end(), match_index) != jetConstituents.end()) {
+	      std::cout<<"found jet match with jet index: "<<i_jet<<std::endl;
+	      vertTrack_iJet->push_back(i_jet);
+	    } 
+	    i_jet++;
+	  }
+	  */
 	}
 	else{
 	  vertTrack_nValidPixelHits->push_back(vertTrack->hitPattern().numberOfValidPixelHits());
@@ -1309,6 +1406,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     scoutTrack_pt = new std::vector<float>;
     scoutTrack_eta = new std::vector<float>;
     scoutTrack_phi = new std::vector<float>;
+    scoutTrack_phiBeamspot = new std::vector<float>;
     scoutTrack_reducedChi2 = new std::vector<float>;
     scoutTrack_charge = new std::vector<float>;
     scoutTrack_dxy = new std::vector<float>;
@@ -1317,6 +1415,8 @@ void ScoutingTreeMakerRun3::beginJob() {
     scoutTrack_d3DSig = new std::vector<float>;
     scoutTrack_dz = new std::vector<float>;
     scoutTrack_dzSig = new std::vector<float>;
+    scoutTrack_vx = new std::vector<float>;
+    scoutTrack_vy = new std::vector<float>;
     scoutTrack_nValidPixelHits = new std::vector<int>;
     scoutTrack_nTrackerLayersWithMeasurement = new std::vector<int>;
     scoutTrack_nValidStripHits = new std::vector<int>;
@@ -1339,7 +1439,13 @@ void ScoutingTreeMakerRun3::beginJob() {
     vertTrack_nTrackerLayersWithMeasurement = new std::vector<int>;
     vertTrack_nValidStripHits = new std::vector<int>;
     vertTrack_nMissingInnerHits = new std::vector<int>;
-    vertTrack_iVtx = new std::vector<int>; 
+    vertTrack_iVtx = new std::vector<int>;
+    vertTrack_shiftZValue = new std::vector<float>;
+    vertTrack_shift3DValue = new std::vector<float>;
+    vertTrack_shiftZSig = new std::vector<float>;
+    vertTrack_shift3DSig = new std::vector<float>;
+    //vertTrack_iJet = new std::vector<int>;
+    vertTrack_hasPFMatch = new std::vector<bool>;
     
     match_ptRatio = new std::vector<float>;
     match_deltaR = new std::vector<float>;
@@ -1403,10 +1509,17 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("vertTrack_nValidStripHits",&vertTrack_nValidStripHits);
     objectTree->Branch("vertTrack_nMissingInnerHits",&vertTrack_nMissingInnerHits);
     objectTree->Branch("vertTrack_iVtx",&vertTrack_iVtx);
+    objectTree->Branch("vertTrack_shiftZValue",&vertTrack_shiftZValue);
+    objectTree->Branch("vertTrack_shift3DValue",&vertTrack_shift3DValue);
+    objectTree->Branch("vertTrack_shiftZSig",&vertTrack_shiftZSig);
+    objectTree->Branch("vertTrack_shift3DSig",&vertTrack_shift3DSig);
+    //objectTree->Branch("vertTrack_iJet",&vertTrack_iJet);
+    objectTree->Branch("vertTrack_hasPFMatch",&vertTrack_hasPFMatch);
     
     objectTree->Branch("scoutTrack_pt",&scoutTrack_pt);
     objectTree->Branch("scoutTrack_eta",&scoutTrack_eta);
     objectTree->Branch("scoutTrack_phi",&scoutTrack_phi);
+    objectTree->Branch("scoutTrack_phiBeamspot",&scoutTrack_phiBeamspot);
     objectTree->Branch("scoutTrack_reducedChi2",&scoutTrack_reducedChi2);
     objectTree->Branch("scoutTrack_charge",&scoutTrack_charge);
     objectTree->Branch("scoutTrack_dxy",&scoutTrack_dxy);
@@ -1415,6 +1528,8 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutTrack_d3DSig",&scoutTrack_d3DSig);
     objectTree->Branch("scoutTrack_dz",&scoutTrack_dz);
     objectTree->Branch("scoutTrack_dzSig",&scoutTrack_dzSig);
+    objectTree->Branch("scoutTrack_vx",&scoutTrack_vx);
+    objectTree->Branch("scoutTrack_vy",&scoutTrack_vy);
     objectTree->Branch("scoutTrack_nValidPixelHits",&scoutTrack_nValidPixelHits);
     objectTree->Branch("scoutTrack_nTrackerLayersWithMeasurement",&scoutTrack_nTrackerLayersWithMeasurement);
     objectTree->Branch("scoutTrack_nValidStripHits",&scoutTrack_nValidStripHits);
@@ -1461,6 +1576,8 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutVert_dPhi",&scoutVert_dPhi);
     objectTree->Branch("scoutVert_dVV",&scoutVert_dVV);
     objectTree->Branch("weight", &weight, "weight/D");
+    objectTree->Branch("beamspot_x", &beamspot_x, "beamspot_x/F");
+    objectTree->Branch("beamspot_y", &beamspot_y, "beamspot_y/F");
     objectTree->Branch("eventId", &eventId, "eventId/I");
     objectTree->Branch("runNumber", &runNumber, "runNumber/I");
     objectTree->Branch("lumiBlock", &lumiBlock, "lumiBlock/I");
@@ -1607,6 +1724,7 @@ void ScoutingTreeMakerRun3::endJob() {
   delete scoutTrack_pt;
   delete scoutTrack_eta;
   delete scoutTrack_phi;
+  delete scoutTrack_phiBeamspot;
   delete scoutTrack_reducedChi2;
   delete scoutTrack_charge;
   delete scoutTrack_dxy;
@@ -1615,6 +1733,8 @@ void ScoutingTreeMakerRun3::endJob() {
   delete scoutTrack_d3DSig;
   delete scoutTrack_dz;
   delete scoutTrack_dzSig;
+  delete scoutTrack_vx;
+  delete scoutTrack_vy;
   delete scoutTrack_nValidPixelHits;
   delete scoutTrack_nTrackerLayersWithMeasurement;
   delete scoutTrack_nValidStripHits;
@@ -1638,6 +1758,12 @@ void ScoutingTreeMakerRun3::endJob() {
   delete vertTrack_nValidStripHits;
   delete vertTrack_nMissingInnerHits;
   delete vertTrack_iVtx;
+  delete vertTrack_shiftZValue;
+  delete vertTrack_shift3DValue;
+  delete vertTrack_shiftZSig;
+  delete vertTrack_shift3DSig;
+  //delete vertTrack_iJet;
+  delete vertTrack_hasPFMatch;
   
   delete match_ptRatio;
   delete match_deltaR;

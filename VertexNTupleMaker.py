@@ -36,6 +36,7 @@ process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
 process.source = cms.Source("PoolSource",
     # Test file generated on CMSSW 13.3.0
     fileNames = cms.untracked.vstring(
+        #'file:/afs/cern.ch/work/r/rmccarth/private/stop_dbar_miniAOD_1.root'
         #'file:/afs/cern.ch/work/r/rmccarth/private/MiniAODSIM_QCD-HT_1500to2000.root'
         #'file:/afs/cern.ch/work/r/rmccarth/private/TTto4Q_MiniAOD.root'
     )
@@ -47,7 +48,7 @@ process.load("Configuration.StandardSequences.MagneticField_cff")
 #Choosing the GlobalTag
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 from Configuration.AlCa.GlobalTag import GlobalTag
-process.GlobalTag = GlobalTag(process.GlobalTag, '133X_mcRun3_2024_realistic_v9', '')  
+process.GlobalTag = GlobalTag(process.GlobalTag, '140X_mcRun3_2024_realistic_v26', '')  
 
 process.load("RecoVertex.BeamSpotProducer.BeamSpot_cfi")
 process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
@@ -114,14 +115,14 @@ process.triggerFilter = cms.EDFilter('TriggerFilter',
 
 process.Vertexer = cms.EDProducer('Vertexer',
                                   seed_tracks_src = cms.InputTag('hltScoutingUnpackProducer', 'Track'),
-                                  pt_min_cut = cms.double(1.1),
-                                  dxySig_min_cut = cms.double(8.0),
+                                  pt_min_cut = cms.double(1.0),
+                                  dxySig_min_cut = cms.double(5.0),
                                   npixelHits_min_cut = cms.int32(1),
-                                  ntrackerLayers_min_cut = cms.int32(6),
+                                  ntrackerLayers_min_cut = cms.int32(5),
                                   #kvr_params = kvr_params,
                                   #do_track_refinement = cms.bool(False), # remove tracks + trim out tracks with IP significance larger than trackrefine_sigmacut and trackrefine_trimmax, respectively
                                   resolve_split_vertices_loose = cms.bool(False), # an alternative merging routine with `loose` criteria, to merge any nearby vertices within a given dist or significance
-                                  resolve_split_vertices_tight = cms.bool(True), # merging routine, based on vtx dphi and dVV
+                                  resolve_split_vertices_tight = cms.bool(False), # merging routine, based on vtx dphi and dVV
                                   investigate_merged_vertices = cms.bool(False), # investigate quality cuts on merged vertices from tight merging
                                   #resolve_shared_jets = cms.bool(True),       # shared-jet mitigation
                                   #resolve_shared_jets_src = cms.InputTag('selectedPatJets'),
@@ -139,7 +140,7 @@ process.Vertexer = cms.EDProducer('Vertexer',
                                   min_track_vertex_sig_to_remove = cms.double(1.5), # default track arbitration
                                   remove_one_track_at_a_time = cms.bool(True),
                                   max_nm1_refit_dist3 = cms.double(-1),
-                                  max_nm1_refit_distz = cms.double(0.005),
+                                  max_nm1_refit_distz = cms.double(9999.9),
                                   max_nm1_refit_count = cms.int32(-1),
                                   #trackrefine_sigmacut = cms.double(5), # track refinement criteria (*only* if do_track_refinement = True)
                                   #trackrefine_trimmax = cms.double(5), # track refinement criteria (*only* if do_track_refinement = True)
@@ -167,6 +168,8 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       patjets           = patjetsTag,
                                       tracks            = cms.InputTag("hltScoutingUnpackProducer","Track"),
                                       trackRefs         = cms.InputTag("hltScoutingUnpackProducer", "Track-RefToOriginal"),
+                                      vertexShiftZMap    = cms.InputTag("Vertexer","vtxZShift"),
+                                      vertexShift3DMap    = cms.InputTag("Vertexer","vtx3DShift"),
                                       primaryVertices   = pvTag,
                                       displacedVertices = cms.InputTag("Vertexer"),
                                       pfMet             = cms.InputTag("hltScoutingPFPacker","pfMetPt"),
@@ -174,7 +177,8 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       rho               = cms.InputTag("hltScoutingPFPacker","rho"),
                                       beamspot_src = cms.InputTag('offlineBeamSpot'),
                                       genParticle_src = cms.InputTag('genParticles',''),
-                                      generatorName = cms.InputTag('generator')
+                                      generatorName = cms.InputTag('generator'),
+                                      scoutingParticle = scoutingPFTag
                                       )
 
 # Usually it is better to put producers on a task instead of a path
