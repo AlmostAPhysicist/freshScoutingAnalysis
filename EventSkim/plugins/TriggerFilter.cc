@@ -69,7 +69,7 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources> {
       const edm::EDGetTokenT<std::vector<pat::Jet> >  patjetsToken;
       const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
       const edm::EDGetTokenT<edm::TriggerResults> triggerResultsToken;
-      
+
       double luminosity;
       double crossSection;
       edm::InputTag algInputTag_;
@@ -78,6 +78,7 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources> {
       std::unique_ptr<l1t::L1TGlobalUtil> l1GtUtils_;
       std::vector<std::string>     l1Seeds_;
       bool isScouting;
+      bool isMC;
   
       TH1D* h_genWeights;
       TH1D* h_weights;
@@ -103,7 +104,8 @@ TriggerFilter::TriggerFilter(const edm::ParameterSet& iConfig):
   triggerResultsToken(consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("triggerresults"))),
   luminosity(iConfig.existsAs<double>("luminosity") ? iConfig.getParameter<double>  ("luminosity") : 1.0),
   crossSection(iConfig.existsAs<double>("crossSection") ? iConfig.getParameter<double>  ("crossSection") : 1.0),  
-  isScouting(iConfig.existsAs<bool>("isScouting") ? iConfig.getParameter<bool>  ("isScouting") : false)
+  isScouting(iConfig.existsAs<bool>("isScouting") ? iConfig.getParameter<bool>  ("isScouting") : false),
+  isMC(iConfig.existsAs<bool>("isMC") ?  iConfig.getParameter<bool>  ("isMC") : false)
 {
   usesResource("TFileService");
   algInputTag_ = iConfig.getParameter<edm::InputTag>("AlgInputTag");
@@ -137,14 +139,23 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   bool passFilter = true;
   
-  edm::Handle<GenEventInfoProduct> generatorHandle;
-  iEvent.getByToken(GeneratorToken_, generatorHandle);
-  double genWeight = generatorHandle->weight();
-  h_genWeights->Fill("None",genWeight);
-  double theWeight = genWeight*luminosity*crossSection;
-  h_weights->Fill("None",theWeight);
-  h_weightsSquared->Fill("None",pow(theWeight,2));
+  double genWeight;
+  double theWeight;
 
+  if(isMC){
+    edm::Handle<GenEventInfoProduct> generatorHandle;
+    iEvent.getByToken(GeneratorToken_, generatorHandle);
+    genWeight = generatorHandle->weight();
+    h_genWeights->Fill("None",genWeight);
+    theWeight = genWeight*luminosity*crossSection;
+    h_weights->Fill("None",theWeight);
+    h_weightsSquared->Fill("None",pow(theWeight,2));
+  }
+  else{
+    genWeight = 1;
+    theWeight = 1;
+  }
+  
   bool passTrigger;
   if(isScouting){
     l1GtUtils_->retrieveL1(iEvent,iSetup,algToken_);
@@ -201,8 +212,8 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   iEvent.getByToken(patjetsToken, patjetsH);
   std::vector<pat::Jet> patJetVector;
 
-  //Require 4 Pat Jets
-  if(patjetsH.isValid() && !isScouting){
+  //Require 4 Pat Jets, only for MC
+  if(isMC && patjetsH.isValid() && !isScouting){
     for (auto jets_iter = patjetsH->begin(); jets_iter != patjetsH->end(); ++jets_iter) {
       if(jets_iter->pt() > 20){
 	patJetVector.push_back(*jets_iter);
