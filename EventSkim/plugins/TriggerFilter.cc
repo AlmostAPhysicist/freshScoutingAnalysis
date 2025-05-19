@@ -154,6 +154,11 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   else{
     genWeight = 1;
     theWeight = 1;
+    
+    //Just to get the number of events
+    h_genWeights->Fill("None",genWeight);
+    h_weights->Fill("None",theWeight);
+    h_weightsSquared->Fill("None",pow(theWeight,2));
   }
   
   bool passTrigger;

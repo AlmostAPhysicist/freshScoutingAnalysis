@@ -671,6 +671,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   else {
     genWeight = 1;
     theWeight = 1;
+    h_genWeights->Fill("None",genWeight);
+    h_weights->Fill("None",theWeight);
+    h_weightsSquared->Fill("None",pow(theWeight,2));
   }
   
   //Get the beamspot
