@@ -665,18 +665,11 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   //////////////////////////////////////////////////////////////////////
   
   if (max_nm1_refit_dist3 > 0 || max_nm1_refit_distz > 0) {
-    std::vector<int> refit_count(vertices->size(), 0);
-
-    int iv = 0;
-    for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0], ++iv) {
-      if (max_nm1_refit_count > 0 && refit_count[iv] >= max_nm1_refit_count)
-        continue;
-
+    for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0]) {
       const track_vec tks = vertex_track_vec(*v[0]);
       const size_t ntks = tks.size();
       if (ntks < 3)
         continue;
-
 
       std::vector<reco::TransientTrack> ttks(ntks - 1);
       for (size_t i = 0; i < ntks; ++i) {
@@ -686,7 +679,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
         reco::Vertex vnm1(TransientVertex(kv_reco.vertex(ttks)));
         const double dist3_2 = (vnm1.x() - v[0]->x())*(vnm1.x() - v[0]->x()) + (vnm1.y() - v[0]->y())*(vnm1.y() - v[0]->y()) + (vnm1.z() - v[0]->z())*(vnm1.z() - v[0]->z());
         const double distz = sqrt( (vnm1.z() - v[0]->z()) * (vnm1.z() - v[0]->z()) );
-	shiftZVec[seed_track_index_map[tks[i]]] = std::make_pair(distz,(distz/sqrt(fabs(vnm1.covariance(2,2)-v[0]->covariance(2,2)))));
+	shiftZVec[seed_track_index_map[tks[i]]] = std::make_pair(distz,sqrt(fabs(vnm1.covariance(2,2)-v[0]->covariance(2,2))));
 	AlgebraicVector3 vDiff;
 	vDiff[0] = (vnm1.x() - v[0]->x())/sqrt(dist3_2);
 	vDiff[1] = (vnm1.y() - v[0]->y())/sqrt(dist3_2);
@@ -697,22 +690,41 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 	//double err2 = ROOT::Math::Similarity(error, vDiff);
 	double err1_2 = ROOT::Math::Similarity(error1, vDiff);
 	double err2_2 = ROOT::Math::Similarity(error2, vDiff);
+	double err3D = sqrt(fabs(err1_2-err2_2));
 	//shift3DVec[seed_track_index_map[tks[i]]] = std::make_pair(sqrt(dist3_2),sqrt(err2));
-	shift3DVec[seed_track_index_map[tks[i]]] = std::make_pair(sqrt(dist3_2),sqrt(fabs(err1_2-err2_2)));
+	shift3DVec[seed_track_index_map[tks[i]]] = std::make_pair(sqrt(dist3_2),err3D);
 
+	/*
         if (vnm1.chi2() < 0 ||
-            (max_nm1_refit_dist3 > 0 && dist3_2 > pow(max_nm1_refit_dist3, 2)) ||
+            (max_nm1_refit_dist3 > 0 && err3D > max_nm1_refit_dist3) ||
             (max_nm1_refit_distz > 0 && distz > max_nm1_refit_distz)) {
 
           *v[0] = vnm1;
           ++refit_count[iv];
           --v[0], --iv;
           break;
-        }
+	  }*/
+      } //loop over tracks
+
+      std::vector<reco::TransientTrack> ttks_shift;
+      for (size_t i = 0; i < ntks; ++i) {
+	double shift3DErr = shift3DVec[seed_track_index_map[tks[i]]].second;
+	if(max_nm1_refit_dist3 > 0 && shift3DErr < max_nm1_refit_dist3){
+	  ttks_shift.push_back(tt_builder.build(tks[i]));
+	}
+      }
+      if(ttks_shift.size()!=ntks){
+	if (ttks_shift.size()<2) {
+	  v[0] = vertices->erase(v[0]) - 1;
+	  continue;
+	}
+	reco::Vertex vnm1_shift(TransientVertex(kv_reco.vertex(ttks_shift)));
+	*v[0] = vnm1_shift;
       }
     }
-    iv = 0; //some vertices after dz refiting have normalized chi2 > 5
-    for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0], ++iv) {
+    //some vertices after dz refiting have normalized chi2 > 5
+    
+    for (v[0] = vertices->begin(); v[0] != vertices->end(); ++v[0]) {
        if ((*v[0]).normalizedChi2() > 5) {
          v[0] = vertices->erase(v[0]) - 1;
          continue;

@@ -250,8 +250,8 @@ private:
   std::vector<int>* vertTrack_iVtx;
   std::vector<float>* vertTrack_shiftZValue;
   std::vector<float>* vertTrack_shift3DValue;
-  std::vector<float>* vertTrack_shiftZSig;
-  std::vector<float>* vertTrack_shift3DSig;
+  std::vector<float>* vertTrack_shiftZErr;
+  std::vector<float>* vertTrack_shift3DErr;
   //std::vector<int>* vertTrack_iJet;
   std::vector<bool>* vertTrack_hasPFMatch;
   
@@ -294,6 +294,9 @@ private:
   std::vector<float>* scoutVert_chi2;
   std::vector<float>* scoutVert_dPhi;
   std::vector<float>* scoutVert_dVV;
+  std::vector<float>* scoutVert_dT;
+  std::vector<float>* scoutVert_cosT;
+  std::vector<float>* scoutVert_pMag;
   int scoutVert_nVertices;
   double weight;
   float beamspot_x;
@@ -600,8 +603,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   vertTrack_iVtx->clear();
   vertTrack_shiftZValue->clear();
   vertTrack_shift3DValue->clear();
-  vertTrack_shiftZSig->clear();
-  vertTrack_shift3DSig->clear();
+  vertTrack_shiftZErr->clear();
+  vertTrack_shift3DErr->clear();
   //vertTrack_iJet->clear();
   vertTrack_hasPFMatch->clear();
   
@@ -643,6 +646,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   scoutVert_chi2->clear();
   scoutVert_dPhi->clear();
   scoutVert_dVV->clear();
+  scoutVert_dT->clear();
+  scoutVert_cosT->clear();
+  scoutVert_pMag->clear();
 
   jet_pt->clear();
   jet_eta->clear();
@@ -862,10 +868,10 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 	vertTrack_iVtx->push_back(t);
 	std::pair<float,float> shift = (*shiftZMap)[vertTrack];
 	vertTrack_shiftZValue->push_back(shift.first);
-	vertTrack_shiftZSig->push_back(shift.second);
+	vertTrack_shiftZErr->push_back(shift.second);
 	shift = (*shift3DMap)[vertTrack];
 	vertTrack_shift3DValue->push_back(shift.first);
-	vertTrack_shift3DSig->push_back(shift.second);
+	vertTrack_shift3DErr->push_back(shift.second);
 	if(isScouting){
 	  auto scoutTrack = (*ScoutingTrackRefHandle)[vertTrack];
 	  vertTrack_nValidPixelHits->push_back(scoutTrack->tk_nValidPixelHits());
@@ -1090,7 +1096,16 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
     std::vector<TrackRef> trks = vertex_track_vec(v);
     //std::cout<<"vertex number of tracks: "<<trks.size()<<std::endl;
-
+    float p_tot[3] = {0.0, 0.0, 0.0};
+    for(auto trk:trks){
+      p_tot[0] += trk->px();
+      p_tot[1] += trk->py();
+      p_tot[2] += trk->pz();
+    }
+    float cos_T = ( p_tot[0]*(v.x()-beamspot->x0())+p_tot[1]*(v.y()-beamspot->y0())) / (sqrt(pow(p_tot[0],2)+pow(p_tot[1],2))*sqrt(pow(v.x()-beamspot->x0(),2)+pow(v.y()-beamspot->y0(),2)) );
+    float phi = atan2(p_tot[1],p_tot[0]);
+    float d_T = fabs( cos(phi)*(v.y()-beamspot->y0()) - sin(phi)*(v.x()-beamspot->x0()) );
+    
     h_scoutVert_dBV->Fill(dBV_t);
     scoutVert_dBV->push_back(dBV_t);
     scoutVert_dBVErr->push_back(dBV_measurement.error());
@@ -1104,7 +1119,10 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_scoutVert_nTracks->Fill(trks.size());
     scoutVert_nTracks->push_back(trks.size());
     scoutVert_chi2->push_back(v.normalizedChi2());
-
+    scoutVert_dT->push_back(d_T);
+    scoutVert_cosT->push_back(cos_T);
+    scoutVert_pMag->push_back(sqrt(pow(p_tot[0],2)+pow(p_tot[1],2)+pow(p_tot[2],2)));
+    
     if(doGenMatching){
       int i_trk = -1;
       for(auto trk: trks){
@@ -1442,8 +1460,8 @@ void ScoutingTreeMakerRun3::beginJob() {
     vertTrack_iVtx = new std::vector<int>;
     vertTrack_shiftZValue = new std::vector<float>;
     vertTrack_shift3DValue = new std::vector<float>;
-    vertTrack_shiftZSig = new std::vector<float>;
-    vertTrack_shift3DSig = new std::vector<float>;
+    vertTrack_shiftZErr = new std::vector<float>;
+    vertTrack_shift3DErr = new std::vector<float>;
     //vertTrack_iJet = new std::vector<int>;
     vertTrack_hasPFMatch = new std::vector<bool>;
     
@@ -1485,6 +1503,9 @@ void ScoutingTreeMakerRun3::beginJob() {
     scoutVert_chi2 = new std::vector<float>;
     scoutVert_dPhi = new std::vector<float>;
     scoutVert_dVV = new std::vector<float>;
+    scoutVert_dT = new std::vector<float>;
+    scoutVert_cosT = new std::vector<float>;
+    scoutVert_pMag = new std::vector<float>;
 
     jet_pt = new std::vector<float>;
     jet_eta = new std::vector<float>;
@@ -1511,8 +1532,8 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("vertTrack_iVtx",&vertTrack_iVtx);
     objectTree->Branch("vertTrack_shiftZValue",&vertTrack_shiftZValue);
     objectTree->Branch("vertTrack_shift3DValue",&vertTrack_shift3DValue);
-    objectTree->Branch("vertTrack_shiftZSig",&vertTrack_shiftZSig);
-    objectTree->Branch("vertTrack_shift3DSig",&vertTrack_shift3DSig);
+    objectTree->Branch("vertTrack_shiftZErr",&vertTrack_shiftZErr);
+    objectTree->Branch("vertTrack_shift3DErr",&vertTrack_shift3DErr);
     //objectTree->Branch("vertTrack_iJet",&vertTrack_iJet);
     objectTree->Branch("vertTrack_hasPFMatch",&vertTrack_hasPFMatch);
     
@@ -1575,6 +1596,9 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutVert_chi2",&scoutVert_chi2);
     objectTree->Branch("scoutVert_dPhi",&scoutVert_dPhi);
     objectTree->Branch("scoutVert_dVV",&scoutVert_dVV);
+    objectTree->Branch("scoutVert_dT",&scoutVert_dT);
+    objectTree->Branch("scoutVert_cosT",&scoutVert_cosT);
+    objectTree->Branch("scoutVert_pMag",&scoutVert_pMag);
     objectTree->Branch("weight", &weight, "weight/D");
     objectTree->Branch("beamspot_x", &beamspot_x, "beamspot_x/F");
     objectTree->Branch("beamspot_y", &beamspot_y, "beamspot_y/F");
@@ -1760,8 +1784,8 @@ void ScoutingTreeMakerRun3::endJob() {
   delete vertTrack_iVtx;
   delete vertTrack_shiftZValue;
   delete vertTrack_shift3DValue;
-  delete vertTrack_shiftZSig;
-  delete vertTrack_shift3DSig;
+  delete vertTrack_shiftZErr;
+  delete vertTrack_shift3DErr;
   //delete vertTrack_iJet;
   delete vertTrack_hasPFMatch;
   
@@ -1803,6 +1827,9 @@ void ScoutingTreeMakerRun3::endJob() {
   delete scoutVert_chi2;
   delete scoutVert_dPhi;
   delete scoutVert_dVV;
+  delete scoutVert_dT;
+  delete scoutVert_cosT;
+  delete scoutVert_pMag;
 
   delete jet_pt;
   delete jet_eta;
