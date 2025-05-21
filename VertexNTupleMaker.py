@@ -139,8 +139,8 @@ process.Vertexer = cms.EDProducer('Vertexer',
                                   max_track_vertex_sig = cms.double(5), # default track arbitration
                                   min_track_vertex_sig_to_remove = cms.double(1.5), # default track arbitration
                                   remove_one_track_at_a_time = cms.bool(True),
-                                  max_nm1_refit_dist3 = cms.double(-1),
-                                  max_nm1_refit_distz = cms.double(9999.9),
+                                  max_nm1_refit_dist3 = cms.double(0.002),
+                                  max_nm1_refit_distz = cms.double(-1),
                                   max_nm1_refit_count = cms.int32(-1),
                                   #trackrefine_sigmacut = cms.double(5), # track refinement criteria (*only* if do_track_refinement = True)
                                   #trackrefine_trimmax = cms.double(5), # track refinement criteria (*only* if do_track_refinement = True)
