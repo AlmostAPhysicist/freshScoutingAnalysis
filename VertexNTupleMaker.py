@@ -22,6 +22,12 @@ options.register('crossSection',
                  VarParsing.VarParsing.varType.float,
                  "Cross Section for weighting"
     )
+options.register('isMC',
+                 True,
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.bool,
+                 "If using MC or data"
+    )
 
 options.parseArguments()
 process.load("FWCore.MessageService.MessageLogger_cfi")
@@ -34,11 +40,11 @@ process.MessageLogger.cerr.FwkReport.reportEvery = 100
 process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
 
 process.source = cms.Source("PoolSource",
-    # Test file generated on CMSSW 13.3.0
     fileNames = cms.untracked.vstring(
-        #'file:/afs/cern.ch/work/r/rmccarth/private/stop_dbar_miniAOD_1.root'
-        #'file:/afs/cern.ch/work/r/rmccarth/private/MiniAODSIM_QCD-HT_1500to2000.root'
-        #'file:/afs/cern.ch/work/r/rmccarth/private/TTto4Q_MiniAOD.root'
+        #MC test file
+        #'/store/mc/RunIII2024Summer24MiniAOD/QCD-4Jets_Bin-HT-1000to1200_TuneCP5_13p6TeV_madgraphMLM-pythia8/MINIAODSIM/140X_mcRun3_2024_realistic_v26-v2/100000/00f7403b-49bf-4efd-9b8f-0398bd61d910.root'
+        #Data test file
+        '/store/data/Run2024D/ScoutingPFRun3/HLTSCOUT/v1/000/380/945/00000/cdf45723-07c4-4b41-9595-f368f2929369.root'
     )
 )
 
@@ -48,8 +54,12 @@ process.load("Configuration.StandardSequences.MagneticField_cff")
 #Choosing the GlobalTag
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 from Configuration.AlCa.GlobalTag import GlobalTag
-process.GlobalTag = GlobalTag(process.GlobalTag, '140X_mcRun3_2024_realistic_v26', '')  
 
+if(options.isMC):
+    process.GlobalTag = GlobalTag(process.GlobalTag, '140X_mcRun3_2024_realistic_v26', '')  
+else:
+    process.GlobalTag = GlobalTag(process.GlobalTag, '140X_dataRun3_Prompt_v4', '')
+    
 process.load("RecoVertex.BeamSpotProducer.BeamSpot_cfi")
 process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
 
@@ -101,6 +111,7 @@ process.hltScoutingUnpackProducer = cms.EDProducer('HLTScoutingUnpackProducer',
 L1Info = ["L1_HTT200er", "L1_HTT255er", "L1_HTT280er", "L1_HTT320er", "L1_HTT360er", "L1_HTT400er", "L1_HTT450er", "L1_ETT2000", "L1_SingleJet180", "L1_SingleJet200", "L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5", "L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5", "L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5"]
 
 process.triggerFilter = cms.EDFilter('TriggerFilter',
+                                     isMC = cms.bool(options.isMC),
                                      triggerresults   = cms.InputTag("TriggerResults", "", "HLT"),
                                      AlgInputTag       = cms.InputTag("gtStage2Digis"),
                                      l1tExtBlkInputTag = cms.InputTag("gtStage2Digis"),
@@ -116,7 +127,8 @@ process.triggerFilter = cms.EDFilter('TriggerFilter',
 process.Vertexer = cms.EDProducer('Vertexer',
                                   seed_tracks_src = cms.InputTag('hltScoutingUnpackProducer', 'Track'),
                                   pt_min_cut = cms.double(1.0),
-                                  dxySig_min_cut = cms.double(5.0),
+                                  dxySig_min_cut = cms.double(0.5),
+                                  dxySig_max_cut = cms.double(2.5), #dxySig between 0.5 and 2.5 for a control region
                                   npixelHits_min_cut = cms.int32(1),
                                   ntrackerLayers_min_cut = cms.int32(5),
                                   #kvr_params = kvr_params,
@@ -148,6 +160,7 @@ process.Vertexer = cms.EDProducer('Vertexer',
                                   )
 
 process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
+                                      isMC = cms.bool(options.isMC),
                                       required_ntk     = cms.int32(2),
                                       triggerresults   = cms.InputTag("TriggerResults", "", "HLT"),
                                       ReadPrescalesFromFile = cms.bool( False ),

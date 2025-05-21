@@ -139,6 +139,7 @@ private:
   bool doGenMatching;
   double luminosity;
   double crossSection;
+  double isMC;
   triggerExpression::Data triggerCache_;
 
   bool L1_HTT200er;
@@ -530,7 +531,8 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   doPhiCorrection          (iConfig.existsAs<bool>("doPhiCorrection")    ?    iConfig.getParameter<bool>  ("doPhiCorrection") : false),
   doGenMatching       (iConfig.existsAs<bool>("doGenMatching")   ?    iConfig.getParameter<bool>  ("doGenMatching") : false),
   luminosity          (iConfig.existsAs<double>("luminosity")    ?    iConfig.getParameter<double>  ("luminosity") : 1.0),
-  crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0)
+  crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0),
+  isMC                    (iConfig.existsAs<bool>("isMC")               ?    iConfig.getParameter<bool>  ("isMC")            : false)
 {
     usesResource("TFileService");
     if (doTrigger) {
@@ -658,15 +660,27 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   eventId = iEvent.id().event();
   runNumber = iEvent.id().run();
   lumiBlock = iEvent.luminosityBlock();
+
+  double genWeight;
+  double theWeight;
   
-  edm::Handle<GenEventInfoProduct> generatorHandle;
-  iEvent.getByToken(GeneratorToken_, generatorHandle);
-  double genWeight = generatorHandle->weight();
-  h_genWeights->Fill("None",genWeight);
-  double theWeight = genWeight*luminosity*crossSection;
-  weight = theWeight;
-  h_weights->Fill("None",theWeight);
-  h_weightsSquared->Fill("None",pow(theWeight,2));
+  if(isMC){
+    edm::Handle<GenEventInfoProduct> generatorHandle;
+    iEvent.getByToken(GeneratorToken_, generatorHandle);
+    genWeight = generatorHandle->weight();
+    h_genWeights->Fill("None",genWeight);
+    theWeight = genWeight*luminosity*crossSection;
+    weight = theWeight;
+    h_weights->Fill("None",theWeight);
+    h_weightsSquared->Fill("None",pow(theWeight,2));
+  }
+  else {
+    genWeight = 1;
+    theWeight = 1;
+    h_genWeights->Fill("None",genWeight);
+    h_weights->Fill("None",theWeight);
+    h_weightsSquared->Fill("None",pow(theWeight,2));
+  }
   
   //Get the beamspot
   edm::Handle<reco::BeamSpot> beamspot;
@@ -779,13 +793,13 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     }
   }
 
-  //Get the jets
+  //Get the pat jets, only for MC
   Handle<vector<pat::Jet> > patjetsH;
-  iEvent.getByToken(patjetsToken, patjetsH);
+  if(isMC) iEvent.getByToken(patjetsToken, patjetsH);
   std::vector<pat::Jet> patJetVector;
-
+  
   //Require 4 Pat Jets
-  if(patjetsH.isValid() && !isScouting){
+  if(isMC && patjetsH.isValid() && !isScouting){
     for (auto jets_iter = patjetsH->begin(); jets_iter != patjetsH->end(); ++jets_iter) {
       if(jets_iter->pt() > 20){
 	patJetVector.push_back(*jets_iter);
@@ -906,12 +920,12 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       t++;
     }
   }
-  
+
   std::vector<reco::GenParticle>::const_iterator genParticleIter;
   edm::Handle<std::vector<reco::GenParticle>> genParticle_handle;
   std::vector<GlobalPoint> genVertices;
   
-  if(doGenMatching){
+  if(isMC && doGenMatching){
     //Get gen particles for truth-level vertices
     iEvent.getByToken(GenParticleToken_,genParticle_handle);
     
@@ -1123,7 +1137,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     scoutVert_cosT->push_back(cos_T);
     scoutVert_pMag->push_back(sqrt(pow(p_tot[0],2)+pow(p_tot[1],2)+pow(p_tot[2],2)));
     
-    if(doGenMatching){
+    if(isMC && doGenMatching){
       int i_trk = -1;
       for(auto trk: trks){
 	i_trk++;
@@ -1153,7 +1167,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     t++;  
   } //loop over vertices
 
-  if(doGenMatching){
+  if(isMC && doGenMatching){
     sort(deltaRVecVertices.begin(), deltaRVecVertices.end(), CompareDeltaR); //sort matches by deltaR smallest to largest
     std::vector<std::vector<float>> finalMatchesVertices;
     while(deltaRVecVertices.size()>0){
