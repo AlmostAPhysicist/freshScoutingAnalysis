@@ -565,7 +565,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   using namespace edm;
   using namespace std;
   using namespace reco;
-
+  
   scoutTrack_pt->clear();
   scoutTrack_eta->clear();
   scoutTrack_phi->clear();
@@ -1294,7 +1294,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     dBV_1 = dBV_Meas1D_1.value();
     bs2derr_1 = dBV_Meas1D_1.error();
 
-    if(dBV_1<0.1) return;
+    if(dBV_1<0.01) return;
 
     h_genWeights->Fill("dBV",genWeight);
     h_weights->Fill("dBV",theWeight);

@@ -776,7 +776,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
           double phi1 = atan2(v1y, v1x);
 
-          if (fabs(reco::deltaPhi(phi0, phi1)) < 0.5 && v_dist.value() < 0.0300 && dBV0 > 0.0100 && dBV1 > 0.0100) {
+          if (fabs(reco::deltaPhi(phi0, phi1)) < 0.5 && v_dist.value() < 0.0500 && dBV0 > 0.0100 && dBV1 > 0.0100) {
             track_set tracks_to_fit;
             for (int i = 0; i < 2; ++i)
               for (auto tk : tracks[i])
