@@ -124,6 +124,9 @@ private:
   const edm::EDGetTokenT<edm::ValueMap<std::pair<float,float>> >  vertexShift3DToken;
   const edm::EDGetTokenT<std::vector<reco::Vertex> >  verticesToken;
 
+  //For reco-scout comparison
+  const edm::EDGetTokenT<std::vector<reco::Track> >  recoTracksToken;
+
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::GenParticle>> GenParticleToken_;
   const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
@@ -255,6 +258,12 @@ private:
   std::vector<float>* vertTrack_shift3DErr;
   //std::vector<int>* vertTrack_iJet;
   std::vector<bool>* vertTrack_hasPFMatch;
+
+  std::vector<float>* reco_dpt_diff;
+  std::vector<float>* reco_deta_diff;
+  std::vector<float>* reco_dphi_diff;
+  std::vector<float>* reco_dxy_diff;
+  std::vector<float>* reco_dchi2_diff;
   
   std::vector<float>* match_ptRatio;
   std::vector<float>* match_deltaR;
@@ -338,7 +347,7 @@ private:
   TH1D* h_genWeights = new TH1D("genWeights",";Cut Applied; Sum of Gen Weights",5,0,5);
   TH1D* h_weights = new TH1D("weights",";Cut Applied; Sum of Weights",5,0,5);
   TH1D* h_weightsSquared = new TH1D("weightsSquared",";Cut Applied; Sum of Squared Weights",5,0,5);
-  
+    
   typedef std::set<reco::TrackRef> track_set;
   typedef std::vector<reco::TrackRef> track_vec;
   
@@ -521,6 +530,7 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   vertexShiftZToken              (consumes<edm::ValueMap<std::pair<float,float>>>            (iConfig.getParameter<edm::InputTag>("vertexShiftZMap"))),
   vertexShift3DToken              (consumes<edm::ValueMap<std::pair<float,float>>>            (iConfig.getParameter<edm::InputTag>("vertexShift3DMap"))),
   verticesToken            (consumes<std::vector<reco::Vertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),  
+  recoTracksToken              (consumes<std::vector<reco::Track> >            (iConfig.getParameter<edm::InputTag>("recoTrack"))),
   beamspot_token(consumes<reco::BeamSpot>(iConfig.getParameter<edm::InputTag>("beamspot_src"))),
   GenParticleToken_(consumes(iConfig.getParameter<edm::InputTag>("genParticle_src"))),
   GeneratorToken_(consumes(iConfig.getParameter<edm::InputTag>("generatorName"))),
@@ -609,6 +619,12 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   vertTrack_shift3DErr->clear();
   //vertTrack_iJet->clear();
   vertTrack_hasPFMatch->clear();
+
+  reco_dpt_diff->clear();
+  reco_deta_diff->clear();
+  reco_dphi_diff->clear();
+  reco_dxy_diff->clear();
+  reco_dchi2_diff->clear();
   
   match_deltaR->clear();
   match_ptRatio->clear();
@@ -1093,6 +1109,50 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     }
     genScout_nMatches = finalMatches.size();
   }  //doGenMatching
+
+  //Scouting and Reco track matching
+
+  //Structure: for a scouting track, loop over reco tracks, add delta(pt, eta, phi)/(pt, eta, phi) entry to the histograms if it matches
+  
+  edm::Handle<std::vector<reco::Track>> RecoTrackHandle;
+  iEvent.getByToken(recoTracksToken, RecoTrackHandle);
+  
+  // Loop over Scouting Tracks
+  for (auto scout_track_iter = ScoutingTrackHandle->begin(); scout_track_iter != ScoutingTrackHandle->end(); ++scout_track_iter) {
+    const reco::Track& scout_track = *scout_track_iter;
+
+    float pt_scout = scout_track.pt();
+    float eta_scout = scout_track.eta();
+    float phi_scout = scout_track.phi();
+    
+    // Loop over Reco Tracks
+    for (auto reco_track_iter = RecoTrackHandle->begin(); reco_track_iter != RecoTrackHandle->end(); ++reco_track_iter) {
+      const reco::Track& reco_track = *reco_track_iter;
+      
+    float pt_reco = reco_track.pt();
+    float eta_reco = reco_track.eta();
+    float phi_reco = reco_track.phi();
+    
+    float precision = 0.01;
+
+    float dpt_reco = (pt_reco - pt_scout) / pt_reco;
+    float deta_reco = (eta_reco - eta_scout);
+    float dphi_reco = reco::deltaPhi(phi_reco, phi_scout);  // Use CMSSW's deltaPhi() 
+    
+    if(dpt_reco < precision && deta_reco < precision && dphi_reco < precision){
+      printf("matched track\n");
+      reco_dpt_diff->push_back(dpt_reco);
+      reco_dpt_diff->push_back(deta_reco);
+      reco_dpt_diff->push_back(dphi_reco);
+      reco_dxy_diff->push_back(0.0);  //not yet implemented
+      reco_dchi2_diff->push_back(0.0);//not yet implemented
+    }
+    else{
+      printf("did not match track\n");
+    }
+    }
+  }
+
   
   //Two leading vertices
   vector<double> dBVs;
@@ -1478,6 +1538,12 @@ void ScoutingTreeMakerRun3::beginJob() {
     vertTrack_shift3DErr = new std::vector<float>;
     //vertTrack_iJet = new std::vector<int>;
     vertTrack_hasPFMatch = new std::vector<bool>;
+
+    reco_dpt_diff = new std::vector<float>;
+    reco_deta_diff = new std::vector<float>;
+    reco_dphi_diff = new std::vector<float>;
+    reco_dxy_diff = new std::vector<float>;
+    reco_dchi2_diff = new std::vector<float>;
     
     match_ptRatio = new std::vector<float>;
     match_deltaR = new std::vector<float>;
@@ -1550,6 +1616,13 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("vertTrack_shift3DErr",&vertTrack_shift3DErr);
     //objectTree->Branch("vertTrack_iJet",&vertTrack_iJet);
     objectTree->Branch("vertTrack_hasPFMatch",&vertTrack_hasPFMatch);
+
+    //For the matching between reco and scout tracks
+    objectTree->Branch("reco_dpt_diff",&reco_dpt_diff);
+    objectTree->Branch("reco_deta_diff",&reco_deta_diff);
+    objectTree->Branch("reco_dphi_diff",&reco_dphi_diff);
+    objectTree->Branch("reco_dxy_diff",&reco_dxy_diff);
+    objectTree->Branch("reco_dchi2_diff",&reco_dchi2_diff);
     
     objectTree->Branch("scoutTrack_pt",&scoutTrack_pt);
     objectTree->Branch("scoutTrack_eta",&scoutTrack_eta);
@@ -1802,6 +1875,12 @@ void ScoutingTreeMakerRun3::endJob() {
   delete vertTrack_shift3DErr;
   //delete vertTrack_iJet;
   delete vertTrack_hasPFMatch;
+
+  delete reco_dpt_diff;
+  delete reco_deta_diff;
+  delete reco_dphi_diff;
+  delete reco_dxy_diff;
+  delete reco_dchi2_diff; 
   
   delete match_ptRatio;
   delete match_deltaR;
