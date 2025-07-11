@@ -6,6 +6,7 @@
 #include "FWCore/Framework/interface/Event.h"
 #include "FWCore/Framework/interface/MakerMacros.h"
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
+#include "DataFormats/Math/interface/deltaPhi.h"
 
 #include "FWCore/Utilities/interface/EDPutToken.h"
 #include "DataFormats/Common/interface/ValueMap.h"
@@ -169,6 +170,7 @@ void HLTScoutingUnpackProducer::produce(edm::Event& iEvent, edm::EventSetup cons
 	    if(match_index!=-1){
 	      buildHitPattern(scoutingParticle_collection_handle->at(match_index),scoutingTrack,track);
 	      //std::cout<<"pf lost inner hits: "<<(int) scoutingParticle_collection_handle->at(match_index).lostInnerHits()<<" missing inner hits: "<<track.missingInnerHits()<<" pf pdgid: "<<scoutingParticle_collection_handle->at(match_index).pdgId()<<" number of lost hits: "<<track.missingInnerHits()<<std::endl;
+	      //std::cout<<"pf track quality: " << (int) scoutingParticle_collection_handle->at(match_index).quality()<<std::endl;
 	    }
             recoTrack_collection_ptr->push_back(track);
             scoutingTrackRef_collection_ptr->push_back(edm::Ref<Run3ScoutingTrackCollection>(scoutingTrack_collection_handle, scoutingTrack_index));
@@ -310,13 +312,16 @@ int HLTScoutingUnpackProducer::findCompatibleScoutingTrack(edm::Handle<Run3Scout
     if (is_close(normchi2, scoutingTrack.tk_chi2()/scoutingTrack.tk_ndof(), 0.001)
 	&& is_close(pt, scoutingTrack.tk_pt(), 0.000001)
 	&& is_close(eta, scoutingTrack.tk_eta(), 0.000001)
-	&& is_close(phi, scoutingTrack.tk_phi(), 0.000001)
+	&& deltaPhi(phi, scoutingTrack.tk_phi()) <= 0.00001
 	) {
-      return index;    
+      //printf("matched track!\n");
+      return index;
     }
     index++;
   }
+  //printf("did not match track!\n");
   return -1;
+  
 }
 
 // example from https://github.com/cms-sw/cmssw/blob/master/DataFormats/PatCandidates/src/PackedCandidate.cc#L219
