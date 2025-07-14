@@ -57,6 +57,8 @@
 #include "DataFormats/Scouting/interface/Run3ScoutingMuon.h"
 #include "DataFormats/Scouting/interface/Run3ScoutingParticle.h"
 
+#include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
+
 #include "RecoVertex/VertexTools/interface/VertexDistance3D.h"
 #include "RecoVertex/VertexTools/interface/VertexDistanceXY.h"
 #include "TrackingTools/IPTools/interface/IPTools.h"
@@ -127,6 +129,8 @@ private:
   //For reco-scout comparison
   const edm::EDGetTokenT<std::vector<reco::Track> >  recoTracksToken;
 
+  const edm::EDGetTokenT<std::vector<PileupSummaryInfo>> truePileupToken;
+  
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::GenParticle>> GenParticleToken_;
   const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
@@ -191,6 +195,9 @@ private:
   float phijet4; 
   
   int nVertices;
+
+  int nPV;
+  int truePU;
   
   int ntk_1;
   int ntk_2;
@@ -295,7 +302,9 @@ private:
   std::vector<float>* resVert_y;
   std::vector<float>* resVert_z;
   std::vector<float>* scoutVert_dBV;
+  std::vector<float>* scoutVert_dPVV;
   std::vector<float>* scoutVert_dBVErr;
+  std::vector<float>* scoutVert_dPVVErr;
   std::vector<float>* scoutVert_phi;
   std::vector<float>* scoutVert_z;
   std::vector<float>* scoutVert_x;
@@ -531,6 +540,7 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   vertexShift3DToken              (consumes<edm::ValueMap<std::pair<float,float>>>            (iConfig.getParameter<edm::InputTag>("vertexShift3DMap"))),
   verticesToken            (consumes<std::vector<reco::Vertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),  
   recoTracksToken              (consumes<std::vector<reco::Track> >            (iConfig.getParameter<edm::InputTag>("recoTrack"))),
+  truePileupToken(consumes<std::vector<PileupSummaryInfo>>(iConfig.getParameter<edm::InputTag>("truePileup"))),
   beamspot_token(consumes<reco::BeamSpot>(iConfig.getParameter<edm::InputTag>("beamspot_src"))),
   GenParticleToken_(consumes(iConfig.getParameter<edm::InputTag>("genParticle_src"))),
   GeneratorToken_(consumes(iConfig.getParameter<edm::InputTag>("generatorName"))),
@@ -655,7 +665,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   resVert_y->clear();
   resVert_z->clear();
   scoutVert_dBV->clear();
+  scoutVert_dPVV->clear();
   scoutVert_dBVErr->clear();
+  scoutVert_dPVVErr->clear();
   scoutVert_phi->clear();
   scoutVert_z->clear();
   scoutVert_x->clear();
@@ -697,7 +709,23 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_weights->Fill("None",theWeight);
     h_weightsSquared->Fill("None",pow(theWeight,2));
   }
-  
+
+  //Pileup info -- only for MC
+
+  truePU = -1;
+
+  if(isMC){
+    edm::Handle<std::vector<PileupSummaryInfo>> pileup;
+    iEvent.getByToken(truePileupToken, pileup);
+
+    std::vector<PileupSummaryInfo>::const_iterator pileupIter;
+    for(pileupIter = pileup->begin(); pileupIter != pileup->end(); ++pileupIter){
+      if (pileupIter->getBunchCrossing() == 0) {
+	truePU = pileupIter->getPU_NumInteractions();
+      }
+    }
+  }
+    
   //Get the beamspot
   edm::Handle<reco::BeamSpot> beamspot;
   iEvent.getByToken(beamspot_token, beamspot);
@@ -766,12 +794,14 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     
     float minPVDxy = 999999;
     float minPVDz = 999999;
-    
+
+    nPV = 0;
     for(primaryVertexIter = primaryVertices->begin(); primaryVertexIter != primaryVertices->end(); ++primaryVertexIter){
       ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, *primaryVertexIter);
       if(ttk_transverseDist.second.value()<minPVDxy) minPVDxy = ttk_transverseDist.second.value();
       dz = scoutingTrackIter->dz(primaryVertexIter->position());
       if(fabs(dz)<fabs(minPVDz)) minPVDz = dz;
+      nPV++;
     }
     scoutTrack_minPVDxy->push_back(minPVDxy);
     scoutTrack_minPVDz->push_back(minPVDz);
@@ -1140,7 +1170,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     float dphi_reco = reco::deltaPhi(phi_reco, phi_scout);  // Use CMSSW's deltaPhi() 
     
     if(dpt_reco < precision && deta_reco < precision && dphi_reco < precision){
-      printf("matched track\n");
+      //printf("matched track\n");
       reco_dpt_diff->push_back(dpt_reco);
       reco_dpt_diff->push_back(deta_reco);
       reco_dpt_diff->push_back(dphi_reco);
@@ -1148,7 +1178,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       reco_dchi2_diff->push_back(0.0);//not yet implemented
     }
     else{
-      printf("did not match track\n");
+      //printf("did not match track\n");
     }
     }
   }
@@ -1159,6 +1189,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   VertexDistanceXY vertex_dist_2d;
   t=0;
   Measurement1D dBV_measurement;
+  Measurement1D dPVV_measurement;
   float dBV_t;
   
   std::vector<std::vector<float>> deltaRVecVertices;
@@ -1168,6 +1199,12 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     dBV_t = dBV_measurement.value();
     dBVs.push_back(dBV_t);
 
+    //calculate the distance between the displaced vertices and the leading primary vertex
+    Vertex leading_pv = primaryVertices->at(0);
+    dPVV_measurement = vertex_dist_2d.distance(v, leading_pv);
+    scoutVert_dPVV->push_back(dPVV_measurement.value());
+    scoutVert_dPVVErr->push_back(dPVV_measurement.error());
+    
     std::vector<TrackRef> trks = vertex_track_vec(v);
     //std::cout<<"vertex number of tracks: "<<trks.size()<<std::endl;
     float p_tot[3] = {0.0, 0.0, 0.0};
@@ -1226,7 +1263,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     } // doGenMatching
     t++;  
   } //loop over vertices
-
+  
   if(isMC && doGenMatching){
     sort(deltaRVecVertices.begin(), deltaRVecVertices.end(), CompareDeltaR); //sort matches by deltaR smallest to largest
     std::vector<std::vector<float>> finalMatchesVertices;
@@ -1495,6 +1532,10 @@ void ScoutingTreeMakerRun3::beginJob() {
     tree->Branch("genVert_nVertices", &genVert_nVertices, "genVert_nVertices/I");
     tree->Branch("scoutVert_nVertices", &scoutVert_nVertices, "scoutVert_nVertices/I");
 
+    tree->Branch("truePU"                   , &truePU                                , "truePU/I"      );
+    tree->Branch("nPV"                      , &nPV                                   , "nPV/I"         );
+    //tree->Branch("scoutVert_dPVV"           , &scoutVert_dPVV                        , "scoutVert_dPVV/F"      );
+    
     scoutTrack_pt = new std::vector<float>;
     scoutTrack_eta = new std::vector<float>;
     scoutTrack_phi = new std::vector<float>;
@@ -1575,6 +1616,8 @@ void ScoutingTreeMakerRun3::beginJob() {
     resVert_z = new std::vector<float>;
     scoutVert_dBV = new std::vector<float>;
     scoutVert_dBVErr = new std::vector<float>;
+    scoutVert_dPVV = new std::vector<float>;
+    scoutVert_dPVVErr = new std::vector<float>;
     scoutVert_phi = new std::vector<float>;
     scoutVert_z = new std::vector<float>;
     scoutVert_x = new std::vector<float>;
@@ -1675,6 +1718,8 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("resVert_z",&resVert_z);
     objectTree->Branch("scoutVert_dBV",&scoutVert_dBV);
     objectTree->Branch("scoutVert_dBVErr",&scoutVert_dBVErr);
+    objectTree->Branch("scoutVert_dPVV",&scoutVert_dPVV);
+    objectTree->Branch("scoutVert_dPVVErr",&scoutVert_dPVVErr);
     objectTree->Branch("scoutVert_phi",&scoutVert_phi);
     objectTree->Branch("scoutVert_z",&scoutVert_z);
     objectTree->Branch("scoutVert_x",&scoutVert_x);
@@ -1912,6 +1957,8 @@ void ScoutingTreeMakerRun3::endJob() {
   delete resVert_z;
   delete scoutVert_dBV;
   delete scoutVert_dBVErr;
+  delete scoutVert_dPVV;
+  delete scoutVert_dPVVErr;
   delete scoutVert_phi;
   delete scoutVert_z;
   delete scoutVert_x;
