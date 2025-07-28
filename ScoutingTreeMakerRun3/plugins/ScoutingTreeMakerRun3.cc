@@ -137,6 +137,7 @@ private:
   bool isScouting;
   bool doPhiCorrection;
   bool doGenMatching;
+  bool fillScoutTrack;
   double luminosity;
   double crossSection;
   double isMC;
@@ -530,6 +531,7 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   isScouting                     (iConfig.existsAs<bool>("isScouting")               ?    iConfig.getParameter<bool>  ("isScouting")            : false),
   doPhiCorrection          (iConfig.existsAs<bool>("doPhiCorrection")    ?    iConfig.getParameter<bool>  ("doPhiCorrection") : false),
   doGenMatching       (iConfig.existsAs<bool>("doGenMatching")   ?    iConfig.getParameter<bool>  ("doGenMatching") : false),
+  fillScoutTrack       (iConfig.existsAs<bool>("fillScoutTrack")   ?    iConfig.getParameter<bool>  ("fillScoutTrack") : false),
   luminosity          (iConfig.existsAs<double>("luminosity")    ?    iConfig.getParameter<double>  ("luminosity") : 1.0),
   crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0),
   isMC                    (iConfig.existsAs<bool>("isMC")               ?    iConfig.getParameter<bool>  ("isMC")            : false)
@@ -711,57 +713,58 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   std::vector<reco::Track>::const_iterator scoutingTrackIter;
   //std::vector<Run3ScoutingTrack>::const_iterator scoutingTrackIter;
   uint i_tk = 0;
-  for(scoutingTrackIter = ScoutingTrackHandle->begin(); scoutingTrackIter != ScoutingTrackHandle->end(); ++scoutingTrackIter){
-    scoutTrack_pt->push_back(scoutingTrackIter->pt());
-    scoutTrack_eta->push_back(scoutingTrackIter->eta());
-    scoutTrack_phi->push_back(scoutingTrackIter->phi());
-    scoutTrack_phiBeamspot->push_back(atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0()));
-    //std::cout<<"track phi: "<<scoutingTrackIter->phi()<<std::endl;
-    //std::cout<<"recalc origin phi: "<<atan2(scoutingTrackIter->py(),scoutingTrackIter->px())<<std::endl;
-    //std::cout<<"recalc beamspot phi: "<<atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0())<<std::endl;
-    scoutTrack_reducedChi2->push_back(scoutingTrackIter->chi2()/scoutingTrackIter->ndof());
-    scoutTrack_charge->push_back(scoutingTrackIter->charge());
-    reco::TransientTrack transientScoutTrack = tt_builder.build(*scoutingTrackIter);
-    std::pair<bool, Measurement1D> ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, fake_bs_vtx);
-    std::pair<bool, Measurement1D> ttk_3DDist = IPTools::absoluteImpactParameter3D(transientScoutTrack, fake_bs_vtx);
-    scoutTrack_dxy->push_back(ttk_transverseDist.second.value());
-    scoutTrack_dxySig->push_back(ttk_transverseDist.second.significance());
-    scoutTrack_d3D->push_back(ttk_3DDist.second.value());
-    scoutTrack_d3DSig->push_back(ttk_3DDist.second.significance());
-    //Note: This is a linear approximation that breaks down in reference point of track is far from beamspot. Significance doesn't consider beamspot error in z.
-    float dz = scoutingTrackIter->dz(beamspot->position());
-    scoutTrack_dz->push_back(dz);
-    scoutTrack_dzSig->push_back(dz/scoutingTrackIter->dzError());
-    scoutTrack_vx->push_back(scoutingTrackIter->vx());
-    scoutTrack_vy->push_back(scoutingTrackIter->vy());
-    edm::Ref<std::vector<reco::Track>> trackRef(ScoutingTrackHandle, i_tk);
-    if(isScouting){
-      auto scoutTrack = (*ScoutingTrackRefHandle)[trackRef];
-      scoutTrack_nValidPixelHits->push_back(scoutTrack->tk_nValidPixelHits());
-      scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutTrack->tk_nTrackerLayersWithMeasurement());
-      scoutTrack_nValidStripHits->push_back(scoutTrack->tk_nValidStripHits());
-    }
-    else{
-      scoutTrack_nValidPixelHits->push_back(scoutingTrackIter->hitPattern().numberOfValidPixelHits());
-      scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutingTrackIter->hitPattern().trackerLayersWithMeasurement());
-      scoutTrack_nValidStripHits->push_back(scoutingTrackIter->hitPattern().numberOfValidStripHits());
-    }
-    scoutTrack_nMissingInnerHits->push_back(scoutingTrackIter->missingInnerHits());
+  if(fillScoutTrack){
+    for(scoutingTrackIter = ScoutingTrackHandle->begin(); scoutingTrackIter != ScoutingTrackHandle->end(); ++scoutingTrackIter){
+      scoutTrack_pt->push_back(scoutingTrackIter->pt());
+      scoutTrack_eta->push_back(scoutingTrackIter->eta());
+      scoutTrack_phi->push_back(scoutingTrackIter->phi());
+      scoutTrack_phiBeamspot->push_back(atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0()));
+      //std::cout<<"track phi: "<<scoutingTrackIter->phi()<<std::endl;
+      //std::cout<<"recalc origin phi: "<<atan2(scoutingTrackIter->py(),scoutingTrackIter->px())<<std::endl;
+      //std::cout<<"recalc beamspot phi: "<<atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0())<<std::endl;
+      scoutTrack_reducedChi2->push_back(scoutingTrackIter->chi2()/scoutingTrackIter->ndof());
+      scoutTrack_charge->push_back(scoutingTrackIter->charge());
+      reco::TransientTrack transientScoutTrack = tt_builder.build(*scoutingTrackIter);
+      std::pair<bool, Measurement1D> ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, fake_bs_vtx);
+      std::pair<bool, Measurement1D> ttk_3DDist = IPTools::absoluteImpactParameter3D(transientScoutTrack, fake_bs_vtx);
+      scoutTrack_dxy->push_back(ttk_transverseDist.second.value());
+      scoutTrack_dxySig->push_back(ttk_transverseDist.second.significance());
+      scoutTrack_d3D->push_back(ttk_3DDist.second.value());
+      scoutTrack_d3DSig->push_back(ttk_3DDist.second.significance());
+      //Note: This is a linear approximation that breaks down in reference point of track is far from beamspot. Significance doesn't consider beamspot error in z.
+      float dz = scoutingTrackIter->dz(beamspot->position());
+      scoutTrack_dz->push_back(dz);
+      scoutTrack_dzSig->push_back(dz/scoutingTrackIter->dzError());
+      scoutTrack_vx->push_back(scoutingTrackIter->vx());
+      scoutTrack_vy->push_back(scoutingTrackIter->vy());
+      edm::Ref<std::vector<reco::Track>> trackRef(ScoutingTrackHandle, i_tk);
+      if(isScouting){
+	auto scoutTrack = (*ScoutingTrackRefHandle)[trackRef];
+	scoutTrack_nValidPixelHits->push_back(scoutTrack->tk_nValidPixelHits());
+	scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutTrack->tk_nTrackerLayersWithMeasurement());
+	scoutTrack_nValidStripHits->push_back(scoutTrack->tk_nValidStripHits());
+      }
+      else{
+	scoutTrack_nValidPixelHits->push_back(scoutingTrackIter->hitPattern().numberOfValidPixelHits());
+	scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutingTrackIter->hitPattern().trackerLayersWithMeasurement());
+	scoutTrack_nValidStripHits->push_back(scoutingTrackIter->hitPattern().numberOfValidStripHits());
+      }
+      scoutTrack_nMissingInnerHits->push_back(scoutingTrackIter->missingInnerHits());
     
-    float minPVDxy = 999999;
-    float minPVDz = 999999;
+      float minPVDxy = 999999;
+      float minPVDz = 999999;
     
-    for(primaryVertexIter = primaryVertices->begin(); primaryVertexIter != primaryVertices->end(); ++primaryVertexIter){
-      ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, *primaryVertexIter);
-      if(ttk_transverseDist.second.value()<minPVDxy) minPVDxy = ttk_transverseDist.second.value();
-      dz = scoutingTrackIter->dz(primaryVertexIter->position());
-      if(fabs(dz)<fabs(minPVDz)) minPVDz = dz;
+      for(primaryVertexIter = primaryVertices->begin(); primaryVertexIter != primaryVertices->end(); ++primaryVertexIter){
+	ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, *primaryVertexIter);
+	if(ttk_transverseDist.second.value()<minPVDxy) minPVDxy = ttk_transverseDist.second.value();
+	dz = scoutingTrackIter->dz(primaryVertexIter->position());
+	if(fabs(dz)<fabs(minPVDz)) minPVDz = dz;
+      }
+      scoutTrack_minPVDxy->push_back(minPVDxy);
+      scoutTrack_minPVDz->push_back(minPVDz);
+      i_tk++;
     }
-    scoutTrack_minPVDxy->push_back(minPVDxy);
-    scoutTrack_minPVDz->push_back(minPVDz);
-    i_tk++;
   }
-  
   //Get the jets
   Handle<vector<Run3ScoutingPFJet> > pfjetsH;
   iEvent.getByToken(pfjetsToken, pfjetsH);
