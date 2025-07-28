@@ -10,6 +10,13 @@ options.register('isScouting',
                  VarParsing.VarParsing.varType.bool,
                  "If scouting or reco tracks should be used for vertexing"
     )
+options.register('hasReco',
+                 True,
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.bool,
+                 "If there are reco tracks to compare with the scouting"
+    )
+#Will use the reco derived from the scouting if hasReco is turned to false, so deviation plots entries should all be 0
 options.register('lumi',
                  108.96,
                  VarParsing.VarParsing.multiplicity.singleton,
@@ -37,14 +44,16 @@ process.options = cms.untracked.PSet(
 process.MessageLogger.cerr.FwkSummary.reportEvery = 100
 process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(100) )
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
         #MC test file
-        #'/store/mc/RunIII2024Summer24MiniAOD/QCD-4Jets_Bin-HT-1000to1200_TuneCP5_13p6TeV_madgraphMLM-pythia8/MINIAODSIM/140X_mcRun3_2024_realistic_v26-v2/100000/00f7403b-49bf-4efd-9b8f-0398bd61d910.root'
+        '/store/mc/RunIII2024Summer24MiniAOD/QCD-4Jets_Bin-HT-1000to1200_TuneCP5_13p6TeV_madgraphMLM-pythia8/MINIAODSIM/140X_mcRun3_2024_realistic_v26-v2/100000/00f7403b-49bf-4efd-9b8f-0398bd61d910.root'
         #Data test file
-        '/store/data/Run2024D/ScoutingPFRun3/HLTSCOUT/v1/000/380/945/00000/cdf45723-07c4-4b41-9595-f368f2929369.root'
+        #'/store/data/Run2024D/ScoutingPFRun3/HLTSCOUT/v1/000/380/945/00000/cdf45723-07c4-4b41-9595-f368f2929369.root'
+        #PF monitor file
+        #'/store/data/Run2024D/ScoutingPFMonitor/MINIAOD/PromptReco-v1/000/380/306/00000/70ec6086-72c5-4562-82a8-1f043e645d59.root'
     )
 )
 
@@ -57,8 +66,10 @@ from Configuration.AlCa.GlobalTag import GlobalTag
 
 if(options.isMC):
     process.GlobalTag = GlobalTag(process.GlobalTag, '140X_mcRun3_2024_realistic_v26', '')  
+    truePileupTag = cms.InputTag("slimmedAddPileupInfo")
 else:
     process.GlobalTag = GlobalTag(process.GlobalTag, '140X_dataRun3_Prompt_v4', '')
+    truePileupTag = cms.InputTag("")
     
 process.load("RecoVertex.BeamSpotProducer.BeamSpot_cfi")
 process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
@@ -94,6 +105,11 @@ else:
     pfjetsTag = cms.InputTag("")
     patjetsTag = cms.InputTag("slimmedJets")
     pvTag = cms.InputTag("offlineSlimmedPrimaryVertices")
+
+if(options.hasReco):
+    recoTrackTag = cms.InputTag("displacedTracks")
+else:
+    recoTrackTag = cms.InputTag("hltScoutingUnpackProducer","Track")
     
 # Input tags to the EDProducer
 process.hltScoutingUnpackProducer = cms.EDProducer('HLTScoutingUnpackProducer',
@@ -129,7 +145,8 @@ process.Vertexer = cms.EDProducer('Vertexer',
                                   pt_min_cut = cms.double(1.0),
                                   dxySig_min_cut = cms.double(0.5),
                                   dxySig_max_cut = cms.double(2.5), #dxySig between 0.5 and 2.5 for a control region
-                                  npixelHits_min_cut = cms.int32(1),
+                                  npixelHits_min_cut = cms.int32(3),
+                                  nstripHits_min_cut = cms.int32(8),
                                   ntrackerLayers_min_cut = cms.int32(5),
                                   #kvr_params = kvr_params,
                                   #do_track_refinement = cms.bool(False), # remove tracks + trim out tracks with IP significance larger than trackrefine_sigmacut and trackrefine_trimmax, respectively
@@ -174,6 +191,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       fillScoutTrack = cms.bool( False ),
                                       luminosity = cms.double(options.lumi), #2024 luminosity (fb-1)
                                       crossSection = cms.double(options.crossSection), # cross section in fb
+                                      truePileup        = truePileupTag,
                                       l1Seeds           = cms.vstring(L1Info),
                                       muons             = cms.InputTag("hltScoutingMuonPacker"),
                                       electrons         = cms.InputTag("hltScoutingEgammaPacker"),
@@ -182,8 +200,9 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       patjets           = patjetsTag,
                                       tracks            = cms.InputTag("hltScoutingUnpackProducer","Track"),
                                       trackRefs         = cms.InputTag("hltScoutingUnpackProducer", "Track-RefToOriginal"),
-                                      vertexShiftZMap    = cms.InputTag("Vertexer","vtxZShift"),
-                                      vertexShift3DMap    = cms.InputTag("Vertexer","vtx3DShift"),
+                                      recoTrack         = recoTrackTag,
+                                      vertexShiftZMap   = cms.InputTag("Vertexer","vtxZShift"),
+                                      vertexShift3DMap  = cms.InputTag("Vertexer","vtx3DShift"),
                                       primaryVertices   = pvTag,
                                       displacedVertices = cms.InputTag("Vertexer"),
                                       pfMet             = cms.InputTag("hltScoutingPFPacker","pfMetPt"),
