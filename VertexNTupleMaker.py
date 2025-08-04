@@ -188,6 +188,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       isScouting = cms.bool(options.isScouting),
                                       doPhiCorrection = cms.bool( False ),
                                       doGenMatching = cms.bool( False ),
+                                      fillScoutTrack = cms.bool( False ),
                                       luminosity = cms.double(options.lumi), #2024 luminosity (fb-1)
                                       crossSection = cms.double(options.crossSection), # cross section in fb
                                       truePileup        = truePileupTag,
