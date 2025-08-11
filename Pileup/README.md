@@ -28,3 +28,5 @@ Finally, use it on `pileupCalc.py` as:
 ```
 pileupCalc.py -i GoldenJSON/2024D_Golden.json --inputLumiJSON pileup_JSON.txt --calcMode true --minBiasXsec 69200 --maxPileupBin 100 --numPileupBins 100 MyDataPileupHistogram.root
 ```
+
+Where, for this example, we used `--calcMode true`. This averages out the PU for a given lumisection, and should be compared with the `PileupSummaryInfo::getTrueNumInteractions()` from MC. One could also use  `--calcMode observed`, which draws from a Poisson distribution with mean equals to the average of the lumisection, and can be compared with `PileupSummaryInfo::getNumInteractions()` from MC.
