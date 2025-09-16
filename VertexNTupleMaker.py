@@ -44,7 +44,7 @@ process.options = cms.untracked.PSet(
 process.MessageLogger.cerr.FwkSummary.reportEvery = 100
 process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(100) )
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(1000) )
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
@@ -143,10 +143,10 @@ process.triggerFilter = cms.EDFilter('TriggerFilter',
 process.Vertexer = cms.EDProducer('Vertexer',
                                   seed_tracks_src = cms.InputTag('hltScoutingUnpackProducer', 'Track'),
                                   pt_min_cut = cms.double(1.0),
-                                  dxySig_min_cut = cms.double(0.5),
-                                  dxySig_max_cut = cms.double(2.5), #dxySig between 0.5 and 2.5 for a control region
-                                  npixelHits_min_cut = cms.int32(3),
-                                  nstripHits_min_cut = cms.int32(8),
+                                  dxySig_min_cut = cms.double(2.5),
+                                  dxySig_max_cut = cms.double(5.0), #dxySig between 0.5 and 2.5 for a control region
+                                  npixelHits_min_cut = cms.int32(1),
+                                  nstripHits_min_cut = cms.int32(0),
                                   ntrackerLayers_min_cut = cms.int32(5),
                                   #kvr_params = kvr_params,
                                   #do_track_refinement = cms.bool(False), # remove tracks + trim out tracks with IP significance larger than trackrefine_sigmacut and trackrefine_trimmax, respectively
@@ -178,7 +178,7 @@ process.Vertexer = cms.EDProducer('Vertexer',
 
 process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       isMC = cms.bool(options.isMC),
-                                      required_ntk     = cms.int32(2),
+                                      required_ntk     = cms.int32(4),
                                       triggerresults   = cms.InputTag("TriggerResults", "", "HLT"),
                                       ReadPrescalesFromFile = cms.bool( False ),
                                       AlgInputTag       = cms.InputTag("gtStage2Digis"),
@@ -188,7 +188,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       isScouting = cms.bool(options.isScouting),
                                       doPhiCorrection = cms.bool( False ),
                                       doGenMatching = cms.bool( False ),
-                                      fillScoutTrack = cms.bool( False ),
+                                      fillScoutTrack = cms.bool( True ),
                                       luminosity = cms.double(options.lumi), #2024 luminosity (fb-1)
                                       crossSection = cms.double(options.crossSection), # cross section in fb
                                       truePileup        = truePileupTag,

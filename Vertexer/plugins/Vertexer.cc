@@ -59,7 +59,6 @@
 #include "TrackingTools/TransientTrack/interface/TransientTrack.h"
 #include "TrackingTools/TransientTrack/interface/TransientTrackBuilder.h"
 
-
 using namespace edm;
 
 //
@@ -107,7 +106,6 @@ private:
   const int max_nm1_refit_count;
   const bool investigate_merged_vertices;
   const bool verbose;
-
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::Track>> seed_tracks_token_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> token_builder;
@@ -261,7 +259,6 @@ std::vector<TransientVertex> kv_reco_dropin(std::vector<reco::TransientTrack> & 
 
 // ------------ method called to produce the data  ------------
 void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
-
   //////////////////////////////////////////////////////////////////////                                                                              
   // DataFormats setup and track preselection                                                                                
   ////////////////////////////////////////////////////////////////////// 
@@ -290,9 +287,11 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     std::pair<bool, Measurement1D> ttk_dist = IPTools::absoluteTransverseImpactParameter(ttk, fake_bs_vtx);
     //std::pair<bool, Measurement1D> ttk_dist = track_dist(ttk, fake_bs_vtx);
     float IP_sig = ttk_dist.second.significance();
-    if ((IP_sig > dxySig_min_cut) && (IP_sig < dxySig_max_cut)  && (tk_ref->pt()>pt_min_cut) && (tk_ref->hitPattern().numberOfValidPixelHits() > npixelHits_min_cut) && (tk_ref->hitPattern().numberOfValidStripHits() > nstripHits_min_cut) && (tk_ref->hitPattern().trackerLayersWithMeasurement() > ntrackerLayers_min_cut)){
-      seed_track_refs.push_back(tk_ref);
-      seed_track_index_map[tk_ref] = i_tk;
+    if ((IP_sig > dxySig_min_cut) && (tk_ref->pt()>pt_min_cut) && (tk_ref->hitPattern().numberOfValidPixelHits() > npixelHits_min_cut) && (tk_ref->hitPattern().trackerLayersWithMeasurement() > ntrackerLayers_min_cut)){
+      if(((dxySig_max_cut>0) && (IP_sig < dxySig_max_cut)) || (dxySig_max_cut<0)){
+	seed_track_refs.push_back(tk_ref);
+	seed_track_index_map[tk_ref] = i_tk;
+      }
     }
     //if ((IP_sig > 4) && (tk_ref->pt()>0.9)) seed_track_refs.push_back(tk_ref);
     if (verbose) printf("Build track references. IP_sig = %f\n", IP_sig);

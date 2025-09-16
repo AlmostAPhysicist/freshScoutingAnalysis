@@ -205,7 +205,7 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   //Require 4 PF Jets
   if(pfjetsH.isValid() && isScouting){
     for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
-      if(jets_iter->pt() > 20){
+      if((jets_iter->pt() > 20) && (abs(jets_iter->eta()) < 2.4)){
 	pfJetVector.push_back(*jets_iter);
       }
     }
@@ -220,7 +220,7 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   //Require 4 Pat Jets, only for MC
   if(isMC && patjetsH.isValid() && !isScouting){
     for (auto jets_iter = patjetsH->begin(); jets_iter != patjetsH->end(); ++jets_iter) {
-      if(jets_iter->pt() > 20){
+      if((jets_iter->pt() > 20) && (abs(jets_iter->eta()) < 2.4)){
 	patJetVector.push_back(*jets_iter);
       }
     }
