@@ -151,22 +151,31 @@ private:
   int muon_matchedStation;
 
   int nMuons;
+  int nSelectedMuons;
 
-  double mu1_pt = - 1;
-  double mu1_eta = - 1;
-  double mu1_chi2 = - 1;
-  int mu1_trackLayers = - 1;
-  int mu1_pixelHits = - 1;
-  int mu1_muonHits = - 1;
-  int mu1_matchedStation = - 1;
+  double mu1s_pt;
+  double mu1s_eta;
+  double mu1s_chi2;
+  int mu1s_trackLayers;
+  int mu1s_pixelHits;
+  int mu1s_muonHits;
+  int mu1s_matchedStation;
 
-  double mu2_pt = - 1;
-  double mu2_eta = - 1;
-  double mu2_chi2 = - 1;
-  int mu2_trackLayers = - 1;
-  int mu2_pixelHits = - 1;
-  int mu2_muonHits = - 1;
-  int mu2_matchedStation = - 1;
+  double mu1_pt;
+  double mu1_eta;
+  double mu1_chi2;
+  int mu1_trackLayers;
+  int mu1_pixelHits;
+  int mu1_muonHits;
+  int mu1_matchedStation;
+
+  double mu2_pt;
+  double mu2_eta;
+  double mu2_chi2;
+  int mu2_trackLayers;
+  int mu2_pixelHits;
+  int mu2_muonHits;
+  int mu2_matchedStation;
 
   bool passHTTrigger;
   bool passMuonTrigger;
@@ -262,7 +271,7 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
   if(pfjetsH.isValid()){
     for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
       ht_raw = ht_raw + jets_iter->pt();
-      if(jets_iter->pt() > 20 && abs(jets_iter->eta()) < 2.4){
+      if(jets_iter->pt() > 30 && abs(jets_iter->eta()) < 2.4){ //same requirements as L1_HTTer
         pfJetVector.push_back(*jets_iter);
         ht = ht + jets_iter->pt();
       }
@@ -299,8 +308,12 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
   offlineMuon = false;
   // Temporary container for selected muons
   std::vector<const Run3ScoutingMuon*> orderedMuons;
+  std::vector<const Run3ScoutingMuon*> selectedMuons;
+
 
   nMuons = 0;
+  nSelectedMuons = 0;
+
   for (auto muons_iter = muonsH->begin(); muons_iter != muonsH->end(); ++muons_iter) {
     nMuons++;
     orderedMuons.push_back(&(*muons_iter));
@@ -313,12 +326,52 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
         muons_iter->nRecoMuonMatchedStations() > muon_matchedStation)
     {
       offlineMuon = true;
+      selectedMuons.push_back(&(*muons_iter));
+      nSelectedMuons++;
     }
   }
 
   // Sort by pT
-  std::sort(orderedMuons.begin(), orderedMuons.end(),
-            [](const Run3ScoutingMuon* a, const Run3ScoutingMuon* b){ return a->pt() > b->pt(); });
+  if(orderedMuons.size() > 1){
+    std::sort(orderedMuons.begin(), orderedMuons.end(),
+              [](const Run3ScoutingMuon* a, const Run3ScoutingMuon* b){ return a->pt() > b->pt(); });
+  }
+
+    // Sort by pT
+  if(selectedMuons.size() > 1){
+    std::sort(selectedMuons.begin(), selectedMuons.end(),
+              [](const Run3ScoutingMuon* a, const Run3ScoutingMuon* b){ return a->pt() > b->pt(); });
+  }
+
+
+  mu1s_pt = -100;
+  mu1s_eta = -100;
+  mu1s_chi2 = -100;
+  mu1s_trackLayers = -100;
+  mu1s_pixelHits = -100;
+  mu1s_muonHits = -100;
+  mu1s_matchedStation = -100;
+
+  // Fill leading selected muon info if it exists
+  if (selectedMuons.size() > 0) {
+    const Run3ScoutingMuon* mu = selectedMuons[0];
+    mu1s_pt = mu->pt();
+    mu1s_eta = mu->eta();
+    mu1s_chi2 = mu->normalizedChi2();
+    mu1s_trackLayers = mu->nTrackerLayersWithMeasurement();
+    mu1s_pixelHits = mu->nValidPixelHits();
+    mu1s_muonHits = mu->nValidRecoMuonHits();
+    mu1s_matchedStation = mu->nRecoMuonMatchedStations();
+  }
+
+
+  mu1_pt = -100;
+  mu1_eta = -100;
+  mu1_chi2 = -100;
+  mu1_trackLayers = -100;
+  mu1_pixelHits = -100;
+  mu1_muonHits = -100;
+  mu1_matchedStation = -100;
 
   // Fill leading muon info if it exists
   if (orderedMuons.size() > 0) {
@@ -332,6 +385,14 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
     mu1_matchedStation = mu->nRecoMuonMatchedStations();
   }
 
+  mu2_pt = -100;
+  mu2_eta = -100;
+  mu2_chi2 = -100;
+  mu2_trackLayers = -100;
+  mu2_pixelHits = -100;
+  mu2_muonHits = -100;
+  mu2_matchedStation = -100;
+
   // Fill subleading muon info if it exists
   if (orderedMuons.size() > 1) {
     const Run3ScoutingMuon* mu = orderedMuons[1];
@@ -344,6 +405,10 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
     mu2_matchedStation = mu->nRecoMuonMatchedStations();
   }
   finalMuon = passMuonTrigger && offlineMuon;
+
+  //std::cout<<"passMuonTrigger: "<< passMuonTrigger <<std::endl;
+  //std::cout<<"offlineMuon: "<< offlineMuon <<std::endl;
+  //std::cout<<"finalMuon: "<< finalMuon <<std::endl;
 
   objectTree->Fill();
 
@@ -366,6 +431,15 @@ void TriggerEffs::beginJob() {
   objectTree->Branch("finalMuon",&finalMuon, "finalMuon/O" );
 
   objectTree->Branch("nMuons",&nMuons, "nMuons/I" );
+  objectTree->Branch("nSelectedMuons",&nSelectedMuons, "nSelectedMuons/I" );
+
+  objectTree->Branch("mu1s_pt",&mu1s_pt, "mu1s_pt/D" );
+  objectTree->Branch("mu1s_eta",&mu1s_eta, "mu1s_eta/D" );
+  objectTree->Branch("mu1s_chi2",&mu1s_chi2, "mu1s_chi2/D" );
+  objectTree->Branch("mu1s_trackLayers",&mu1s_trackLayers, "mu1s_trackLayers/I" );
+  objectTree->Branch("mu1s_pixelHits",&mu1s_pixelHits, "mu1s_pixelHits/I" );
+  objectTree->Branch("mu1s_muonHits",&mu1s_muonHits, "mu1s_muonHits/I" );
+  objectTree->Branch("mu1s_matchedStation",&mu1s_matchedStation, "mu1s_matchedStation/I" );
 
   objectTree->Branch("mu1_pt",&mu1_pt, "mu1_pt/D" );
   objectTree->Branch("mu1_eta",&mu1_eta, "mu1_eta/D" );
