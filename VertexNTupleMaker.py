@@ -50,6 +50,7 @@ process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
         #MC test file
         '/store/mc/RunIII2024Summer24MiniAOD/QCD-4Jets_Bin-HT-1000to1200_TuneCP5_13p6TeV_madgraphMLM-pythia8/MINIAODSIM/140X_mcRun3_2024_realistic_v26-v2/100000/00f7403b-49bf-4efd-9b8f-0398bd61d910.root'
+        #'/store/user/brlopesd/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_v2/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_miniAOD_v2/250214_150834/0000/stop_dbar_miniAOD_1.root'
         #Data test file
         #'/store/data/Run2024D/ScoutingPFRun3/HLTSCOUT/v1/000/380/945/00000/cdf45723-07c4-4b41-9595-f368f2929369.root'
         #PF monitor file
@@ -89,9 +90,13 @@ if(options.isScouting):
     pfCandTag = cms.InputTag("")
     lostTrackTag = cms.InputTag("")
 
-    #skim and tree maker
+    #skim
     pfjetsTag = cms.InputTag("hltScoutingPFPacker")
     patjetsTag = cms.InputTag("")
+
+    #tree maker
+    skimPFJetsTag = cms.InputTag("triggerFilter","pfjets")
+    skimPatJetsTag = cms.InputTag("")
     pvTag = cms.InputTag("hltScoutingUnpackProducer","PrimaryVertex")
 else:
     #unpacker
@@ -101,9 +106,13 @@ else:
     pfCandTag = cms.InputTag("packedPFCandidates")
     lostTrackTag = cms.InputTag("lostTracks")
 
-    #skim and tree maker
+    #skim
     pfjetsTag = cms.InputTag("")
     patjetsTag = cms.InputTag("slimmedJets")
+
+    #tree maker
+    skimPFJetsTag = cms.InputTag("")
+    skimPatJetsTag = cms.InputTag("triggerFilter","patjets")
     pvTag = cms.InputTag("offlineSlimmedPrimaryVertices")
 
 if(options.hasReco):
@@ -137,7 +146,9 @@ process.triggerFilter = cms.EDFilter('TriggerFilter',
                                      l1Seeds           = cms.vstring(L1Info),
                                      pfjets            = pfjetsTag,
                                      patjets           = patjetsTag,
-                                     generatorName = cms.InputTag('generator')
+                                     generatorName = cms.InputTag('generator'),
+                                     genJet_src = cms.InputTag('slimmedGenJets',''),
+                                     storeGenJets = cms.bool(False)
                                      )
 
 process.Vertexer = cms.EDProducer('Vertexer',
@@ -196,8 +207,8 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       muons             = cms.InputTag("hltScoutingMuonPacker"),
                                       electrons         = cms.InputTag("hltScoutingEgammaPacker"),
                                       photons           = cms.InputTag("hltScoutingEgammaPacker"),
-                                      pfjets            = pfjetsTag,
-                                      patjets           = patjetsTag,
+                                      pfjets            = skimPFJetsTag,
+                                      patjets           = skimPatJetsTag,
                                       tracks            = cms.InputTag("hltScoutingUnpackProducer","Track"),
                                       trackRefs         = cms.InputTag("hltScoutingUnpackProducer", "Track-RefToOriginal"),
                                       recoTrack         = recoTrackTag,
@@ -210,10 +221,10 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       rho               = cms.InputTag("hltScoutingPFPacker","rho"),
                                       beamspot_src = cms.InputTag('offlineBeamSpot'),
                                       genParticle_src = cms.InputTag('genParticles',''),
+                                      genJet_src = cms.InputTag('slimmedGenJets',''),
                                       generatorName = cms.InputTag('generator'),
                                       scoutingParticle = scoutingPFTag
                                       )
-
 # Usually it is better to put producers on a task instead of a path
 # but paths also work.
 process.p = cms.Path(process.hltScoutingUnpackProducer+process.gtStage2Digis+process.triggerFilter+process.offlineBeamSpot+process.Vertexer+process.scoutingTree)

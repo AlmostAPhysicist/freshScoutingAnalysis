@@ -29,11 +29,32 @@ inputDatasets = ["/QCD-4Jets_Bin-HT-200to400_TuneCP5_13p6TeV_madgraphMLM-pythia8
                  "/ScoutingPFRun3/Run2024F-v1/HLTSCOUT",
                  "/ScoutingPFRun3/Run2024G-v1/HLTSCOUT",
                  "/ScoutingPFRun3/Run2024H-v1/HLTSCOUT",
-                 "/ScoutingPFRun3/Run2024I-v1/HLTSCOUT"
+                 "/ScoutingPFRun3/Run2024I-v1/HLTSCOUT",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-0p1-MH-125-MS-15_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-0p1-MH-125-MS-1_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-0p1-MH-125-MS-23_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-0p1-MH-125-MS-30_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-0p1-MH-125-MS-40_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-0p1-MH-125-MS-55_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-0p1-MH-125-MS-7_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-1-MH-125-MS-15_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-1-MH-125-MS-1_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-1-MH-125-MS-23_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-1-MH-125-MS-30_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-1-MH-125-MS-40_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-1-MH-125-MS-55_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-1-MH-125-MS-7_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-10-MH-125-MS-15_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-10-MH-125-MS-1_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-10-MH-125-MS-23_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-10-MH-125-MS-30_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-10-MH-125-MS-40_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-10-MH-125-MS-55_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM",
+                 "/GluGluH-Hto2Sto4D_Par-ctauS-10-MH-125-MS-7_TuneCP5_13p6TeV_powheg-pythia8/RunIII2024Summer24MiniAOD-140X_mcRun3_2024_realistic_v26-v2/MINIAODSIM"
                  ]
 
 crossSections = [1961000000, 95620000, 13540000, 3033000, 883700, 383500, 125200, 26490, 311400000000, 58500000000, 25400000000, 762100, 762100] #Backgrounds should go first in dataset list with corresponding cross sections listed here
-tagSuffix = "v19-4TrackMin"
+tagSuffix = "v21-2p5to5Dxy"
 scouting = True
 
 for i in range(len(inputDatasets)):
@@ -58,6 +79,14 @@ for i in range(len(inputDatasets)):
         hasReco = False
         unitsPerJob = 300000
         splitting = 'EventAwareLumiBased'
+    elif "GluGluH" in dataset:
+        tag = dataset[1:].split("_Tune")[0] + "_Tree_" + tagSuffix
+        dataBase = "global"
+        totalUnits = 6000000
+        isMC = True
+        hasReco = True
+        unitsPerJob = 100000
+        splitting = 'EventAwareLumiBased'
     else:
         tag = dataset[1:].split("_Tune")[0] + "_Tree_" + tagSuffix
         dataBase = "global"
@@ -72,6 +101,7 @@ theTag = '{tag}' \n
 config.General.requestName = theTag \n
 config.JobType.pluginName = 'Analysis' \n
 config.JobType.psetName = '../VertexNTupleMaker.py' \n
+config.JobType.inputFiles = ['/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/Summer24Prompt24_RunBCDEFGHI.root'] \n
 config.Data.inputDBS = '{dataBase}' \n
 config.Data.inputDataset = '{dataset}' \n
 config.Data.splitting = '{splitting}' \n
@@ -79,7 +109,7 @@ config.Data.unitsPerJob = {unitsPerJob} \n
 config.Data.totalUnits = {totalUnits} \n
 config.Data.allowNonValidInputDataset = True \n
 config.Data.publication = False \n
-config.JobType.pyCfgParams = ['isScouting={scouting}','lumi=108.96','crossSection={crossSection}','isMC={isMC}','hasReco={hasReco}']
+config.JobType.pyCfgParams = ['isScouting={scouting}','lumi=108.96','crossSection={crossSection}','isMC={isMC}','hasReco={hasReco}'] \n
 config.Data.outputDatasetTag = theTag \n
 config.Data.outLFNDirBase = '/store/group/phys_exotica/DVScouting' \n
 config.Site.storageSite = 'T2_CH_CERN' \n

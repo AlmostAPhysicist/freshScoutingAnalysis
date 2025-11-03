@@ -133,6 +133,7 @@ private:
   
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::GenParticle>> GenParticleToken_;
+  const edm::EDGetTokenT<std::vector<reco::GenJet>> GenJetToken_;
   const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> token_builder;
   const edm::EDGetTokenT<Run3ScoutingParticleCollection> scoutingParticle_collection_token_;
@@ -348,6 +349,15 @@ private:
   std::vector<int>* jet_chMultiplicity;
   std::vector<int>* jet_neMultiplicity;
   std::vector<bool>* jet_passJetIdTight;
+
+  std::vector<float>* genJet_pt;
+  std::vector<float>* genJet_eta;
+  std::vector<float>* genJet_phi;
+  std::vector<float>* genJet_mass;
+  std::vector<float>* genJet_energy;
+  std::vector<int>* genJet_nConstituents;
+  float genHT;
+  int nGenJets;
   
   TH1F* h_match_gen_dxy = new TH1F("match_gen_dxy",";Gen particle d_{xy} [cm]; Gen particles / 0.01 cm", 100, 0, 1);
   TH1F* h_gen_dxy = new TH1F("gen_dxy",";Gen particle d_{xy} [cm]; Gen particles / 0.01 cm", 100, 0, 1);
@@ -563,6 +573,7 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   truePileupToken(consumes<std::vector<PileupSummaryInfo>>(iConfig.getParameter<edm::InputTag>("truePileup"))),
   beamspot_token(consumes<reco::BeamSpot>(iConfig.getParameter<edm::InputTag>("beamspot_src"))),
   GenParticleToken_(consumes(iConfig.getParameter<edm::InputTag>("genParticle_src"))),
+  GenJetToken_(consumes(iConfig.getParameter<edm::InputTag>("genJet_src"))),
   GeneratorToken_(consumes(iConfig.getParameter<edm::InputTag>("generatorName"))),
   token_builder(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
   scoutingParticle_collection_token_(consumes(iConfig.getParameter<edm::InputTag>("scoutingParticle"))),
@@ -723,6 +734,13 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   jet_chMultiplicity->clear();
   jet_neMultiplicity->clear();
   jet_passJetIdTight->clear();
+
+  genJet_pt->clear();
+  genJet_eta->clear();
+  genJet_phi->clear();
+  genJet_mass->clear();
+  genJet_energy->clear();
+  genJet_nConstituents->clear();
   
   eventId = iEvent.id().event();
   runNumber = iEvent.id().run();
@@ -853,6 +871,27 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       i_tk++;
     }
   }
+
+  nGenJets = 0;
+  genHT = 0;
+  //Get gen jets
+  std::vector<reco::GenJet>::const_iterator genJetIter;
+  edm::Handle<std::vector<reco::GenJet>> genJet_handle;
+  if(isMC){
+    iEvent.getByToken(GenJetToken_,genJet_handle);
+    for(genJetIter = genJet_handle->begin(); genJetIter != genJet_handle->end(); ++genJetIter){
+      genJet_pt->push_back(genJetIter->pt());
+      genJet_eta->push_back(genJetIter->eta());
+      genJet_phi->push_back(genJetIter->phi());
+      genJet_mass->push_back(genJetIter->mass());
+      float energy = TMath::Sqrt(pow(TMath::CosH(genJetIter->eta())*genJetIter->pt(),2)+pow(genJetIter->mass(),2));
+      genJet_energy->push_back(energy);
+      genJet_nConstituents->push_back(genJetIter->nConstituents());
+      nGenJets++;
+      genHT += genJetIter->pt();
+    }
+  }
+  
   //Get the jets
   Handle<vector<Run3ScoutingPFJet> > pfjetsH;
   iEvent.getByToken(pfjetsToken, pfjetsH);
@@ -861,13 +900,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   //Require 4 PF Jets
   if(pfjetsH.isValid() && isScouting){
     for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
-      if((jets_iter->pt() > 20) && (abs(jets_iter->eta()) < 2.4)){
-	pfJetVector.push_back(*jets_iter);
-      }
+      pfJetVector.push_back(*jets_iter);      
     }
-    nPFJets = pfJetVector.size();
-    if (nPFJets<4) return;
-
     h_genWeights->Fill("nJets",genWeight);
     h_weights->Fill("nJets",theWeight);
     h_weightsSquared->Fill("nJets",pow(theWeight,2));
@@ -920,12 +954,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   //Require 4 Pat Jets
   if(isMC && patjetsH.isValid() && !isScouting){
     for (auto jets_iter = patjetsH->begin(); jets_iter != patjetsH->end(); ++jets_iter) {
-      if((jets_iter->pt() > 20) && (abs(jets_iter->eta()) < 2.4)){
-	patJetVector.push_back(*jets_iter);
-      }
+      patJetVector.push_back(*jets_iter);
     }
-    nPFJets = patJetVector.size();
-    if (nPFJets<4) return;
 
     h_genWeights->Fill("nJets",genWeight);
     h_weights->Fill("nJets",theWeight);
@@ -1423,17 +1453,17 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     ptjet1 = pfJetVector[0].pt();
     ptjet2 = pfJetVector[1].pt();
     ptjet3 = pfJetVector[2].pt();
-    ptjet4 = pfJetVector[3].pt();
+    if(pfJetVector.size()>3) ptjet4 = pfJetVector[3].pt();
     
     etajet1 = pfJetVector[0].eta();
     etajet2 = pfJetVector[1].eta();
     etajet3 = pfJetVector[2].eta();
-    etajet4 = pfJetVector[3].eta();
+    if(pfJetVector.size()>3) etajet4 = pfJetVector[3].eta();
     
     phijet1 = pfJetVector[0].phi();
     phijet2 = pfJetVector[1].phi();
     phijet3 = pfJetVector[2].phi();
-    phijet4 = pfJetVector[3].phi();
+    if(pfJetVector.size()>3) phijet4 = pfJetVector[3].phi();
   }
 
   if(patjetsH.isValid()){
@@ -1441,17 +1471,17 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     ptjet1 = patJetVector[0].pt();
     ptjet2 = patJetVector[1].pt();
     ptjet3 = patJetVector[2].pt();
-    ptjet4 = patJetVector[3].pt();
+    if(patJetVector.size()>3) ptjet4 = patJetVector[3].pt();
     
     etajet1 = patJetVector[0].eta();
     etajet2 = patJetVector[1].eta();
     etajet3 = patJetVector[2].eta();
-    etajet4 = patJetVector[3].eta();
+    if(patJetVector.size()>3) etajet4 = patJetVector[3].eta();
     
     phijet1 = patJetVector[0].phi();
     phijet2 = patJetVector[1].phi();
     phijet3 = patJetVector[2].phi();
-    phijet4 = patJetVector[3].phi();
+    if(patJetVector.size()>3) phijet4 = patJetVector[3].phi();
   }
   
   if(verticesH.isValid()){
@@ -1723,6 +1753,13 @@ void ScoutingTreeMakerRun3::beginJob() {
     jet_chMultiplicity = new std::vector<int>;
     jet_neMultiplicity = new std::vector<int>;
     jet_passJetIdTight = new std::vector<bool>;
+
+    genJet_pt = new std::vector<float>;
+    genJet_eta = new std::vector<float>;
+    genJet_phi = new std::vector<float>;
+    genJet_mass = new std::vector<float>;
+    genJet_energy = new std::vector<float>;
+    genJet_nConstituents = new std::vector<int>;
     
     objectTree = fs->make<TTree>("objectTree","objectTree");
     //std::cout<<"objectTree directory beginJob "<<objectTree->GetDirectory()->GetPath()<<std::endl;
@@ -1851,6 +1888,14 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("jet_chMultiplicity",&jet_chMultiplicity);
     objectTree->Branch("jet_neMultiplicity",&jet_neMultiplicity);
     objectTree->Branch("jet_passJetIdTight",&jet_passJetIdTight);
+    objectTree->Branch("genJet_pt",&genJet_pt);
+    objectTree->Branch("genJet_eta",&genJet_eta);
+    objectTree->Branch("genJet_phi",&genJet_phi);
+    objectTree->Branch("genJet_mass",&genJet_mass);
+    objectTree->Branch("genJet_energy",&genJet_energy);
+    objectTree->Branch("genJet_nConstituents",&genJet_nConstituents);
+    objectTree->Branch("nGenJets", &nGenJets, "nGenJets/I");
+    objectTree->Branch("genHT", &genHT, "genHT/F");
     
     h_genWeights->GetXaxis()->SetBinLabel(1,"None");
     h_genWeights->GetXaxis()->SetBinLabel(2,"nJets");
@@ -2103,6 +2148,13 @@ void ScoutingTreeMakerRun3::endJob() {
   delete jet_chMultiplicity;
   delete jet_neMultiplicity;
   delete jet_passJetIdTight;
+
+  delete genJet_pt;
+  delete genJet_eta;
+  delete genJet_phi;
+  delete genJet_mass;
+  delete genJet_energy;
+  delete genJet_nConstituents;
 }
 
 // ------------ method fills 'descriptions' with the allowed parameters for the module  ------------
