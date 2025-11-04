@@ -66,6 +66,8 @@
 #include "TrackingTools/TransientTrack/interface/TransientTrack.h"
 #include "TrackingTools/TransientTrack/interface/TransientTrackBuilder.h"
 
+#include "DataFormats/Math/interface/deltaPhi.h"
+
 #include "DataFormats/L1TGlobal/interface/GlobalExtBlk.h"
 
 #include "DataFormats/PatCandidates/interface/Jet.h"
@@ -141,7 +143,10 @@ private:
   bool L1_SingleJet180;
   bool L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5;
 
-  const edm::EDGetTokenT<std::vector<Run3ScoutingMuon> >      muonsToken;
+  const edm::EDGetTokenT<std::vector<PileupSummaryInfo>> truePileupToken;
+
+  const edm::EDGetTokenT<std::vector<Run3ScoutingMuon>>      muonsToken;
+  const edm::EDGetTokenT<std::vector<Run3ScoutingParticle>> scoutingParticle_collection_token_;
   double muon_pt;
   double muon_eta;
   double muon_chi2;
@@ -150,8 +155,17 @@ private:
   int muon_muonHits;
   int muon_matchedStation;
 
+  double matchTolerance;
+  double muon_iso;
+  double muon_iso_max;
+
+  int observedPU;
+  int truePU;
+
   int nMuons;
   int nSelectedMuons;
+
+  int nPFMuons;
 
   double mu1s_pt;
   double mu1s_eta;
@@ -180,8 +194,79 @@ private:
   bool passHTTrigger;
   bool passMuonTrigger;
 
+  bool muonIso;
+  bool isPFMuon;
+
+  std::vector<double> muonsIsoCustom;
+  std::vector<double> muonsIsoDefault;
+  std::vector<int> isPFMuons;
+
   bool offlineMuon;
   bool finalMuon;
+
+  double MuonTrackIso(Run3ScoutingMuon const& muonTrack, edm::Handle<std::vector<Run3ScoutingParticle>> const& scoutingParticleH){
+
+    double mu_pt = muonTrack.pt();
+    double mu_eta = muonTrack.eta();
+    double mu_phi = muonTrack.phi();
+
+    double pf_pt = 0.0;
+    double pf_eta;
+    double pf_phi;
+
+    double dEta;
+    double dPhi;
+    double dR;
+
+    for (size_t pf_index = 0; pf_index < scoutingParticleH->size(); pf_index++) {
+      auto & scoutingPFCandidate = scoutingParticleH->at(pf_index);
+
+      pf_eta = scoutingPFCandidate.eta();
+      pf_phi = scoutingPFCandidate.phi();
+      
+      dEta = mu_eta - pf_eta;
+      dPhi = deltaPhi(mu_phi, pf_phi);
+      dR = sqrt(pow(dEta, 2) + pow(dPhi, 2));
+
+      if(abs(scoutingPFCandidate.pdgId()) != 13){
+        if(dR < 0.3){
+          pf_pt = pf_pt + scoutingPFCandidate.pt();
+        }
+      }
+    }
+
+    double iso = pf_pt / mu_pt;
+
+    return iso;
+  }
+
+bool matchesPF(int ID, double tolerance, Run3ScoutingMuon const& muonTrack,  edm::Handle<std::vector<Run3ScoutingParticle>> const& scoutingParticleH){
+
+  bool matches = false;
+
+  float mu_eta = muonTrack.eta();
+  float mu_phi = muonTrack.phi();
+
+  double dEta;
+  double dPhi;
+  double dR;
+
+  for (size_t pf_index = 0; pf_index < scoutingParticleH->size(); pf_index++) {
+    auto & scoutingPFCandidate = scoutingParticleH->at(pf_index);
+
+    float pf_eta = scoutingPFCandidate.eta();
+    float pf_phi = scoutingPFCandidate.phi();
+
+    dEta = mu_eta - pf_eta;
+    dPhi = deltaPhi(mu_phi, pf_phi);
+    dR = sqrt(pow(dEta, 2) + pow(dPhi, 2));
+
+    if(abs(scoutingPFCandidate.pdgId()) == 13 && dR < tolerance){
+          matches = true;
+      }
+  }
+  return matches;
+}
 
 };
 
@@ -207,14 +292,18 @@ TriggerEffs::TriggerEffs(const edm::ParameterSet& iConfig):
     algToken_(consumes<BXVector<GlobalAlgBlk>>(iConfig.getParameter<edm::InputTag>("AlgInputTag"))),
     l1Seeds_(iConfig.getParameter<std::vector<std::string>>("l1Seeds")),
     isMC(iConfig.existsAs<bool>("isMC") ?  iConfig.getParameter<bool>  ("isMC") : false),
+    truePileupToken(consumes<std::vector<PileupSummaryInfo>>(iConfig.getParameter<edm::InputTag>("truePileup"))),
     muonsToken(consumes<std::vector<Run3ScoutingMuon>>(iConfig.getParameter<edm::InputTag>("scoutingMuon"))),
+    scoutingParticle_collection_token_(consumes(iConfig.getParameter<edm::InputTag>("scoutingParticle"))),
     muon_pt(iConfig.getParameter<double>("muon_pt")),
     muon_eta(iConfig.getParameter<double>("muon_eta")),
     muon_chi2(iConfig.getParameter<double>("muon_chi2")),
     muon_trackLayers(iConfig.getParameter<int>("muon_trackLayers")),
     muon_pixelHits(iConfig.getParameter<int>("muon_pixelHits")),
     muon_muonHits(iConfig.getParameter<int>("muon_muonHits")),
-    muon_matchedStation(iConfig.getParameter<int>("muon_matchedStation"))
+    muon_matchedStation(iConfig.getParameter<int>("muon_matchedStation")),
+    matchTolerance(iConfig.getParameter<double>("matchingTolerance")),
+    muon_iso_max(iConfig.getParameter<double>("muon_iso_max"))
     {
   //now do what ever initialization is needed
     usesResource("TFileService");
@@ -255,6 +344,26 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
     genWeight = 1;
     theWeight = 1;
   }
+
+    //Pileup info -- only for MC
+
+  observedPU = -1;
+  truePU = -1;
+
+  if(isMC){
+    edm::Handle<std::vector<PileupSummaryInfo>> pileup;
+    iEvent.getByToken(truePileupToken, pileup);
+
+    std::vector<PileupSummaryInfo>::const_iterator pileupIter;
+    for(pileupIter = pileup->begin(); pileupIter != pileup->end(); ++pileupIter){
+      if (pileupIter->getBunchCrossing() == 0) {
+	observedPU = pileupIter->getPU_NumInteractions();
+	truePU = pileupIter->getTrueNumInteractions();
+      }
+    }
+    
+  }
+    
 
 
   //Get jet info and calculate H_T
@@ -304,26 +413,46 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
   //Offline muon selection -- tight id, following Run 2 AN (until there are recommendations for 2024)
   Handle<vector<Run3ScoutingMuon> > muonsH;
   iEvent.getByToken(muonsToken, muonsH);
-
-  offlineMuon = false;
   // Temporary container for selected muons
   std::vector<const Run3ScoutingMuon*> orderedMuons;
   std::vector<const Run3ScoutingMuon*> selectedMuons;
 
+  //Get scouting particle flow candidates
+  edm::Handle<std::vector<Run3ScoutingParticle>> scoutingParticleH;
+  iEvent.getByToken(scoutingParticle_collection_token_, scoutingParticleH);
 
+  nPFMuons = 0;
+  for (auto pfcands_iter = scoutingParticleH->begin(); pfcands_iter != scoutingParticleH->end(); ++pfcands_iter) {
+    if (abs(pfcands_iter->pdgId()) == 13) nPFMuons++;
+  }
+
+  muonsIsoCustom.clear();
+  muonsIsoDefault.clear();
+  isPFMuons.clear();
   nMuons = 0;
   nSelectedMuons = 0;
+  offlineMuon = false;
 
   for (auto muons_iter = muonsH->begin(); muons_iter != muonsH->end(); ++muons_iter) {
     nMuons++;
     orderedMuons.push_back(&(*muons_iter));
+
+    muon_iso = MuonTrackIso(*muons_iter, scoutingParticleH);
+    isPFMuon = matchesPF(13, matchTolerance, *muons_iter, scoutingParticleH);
+
+    muonsIsoCustom.push_back(muon_iso);
+    muonsIsoDefault.push_back(muons_iter->trackIso());
+    isPFMuons.push_back(isPFMuon ? 1 : 0);
+
     if (muons_iter->pt() > muon_pt &&
         abs(muons_iter->eta()) < muon_eta &&
         muons_iter->normalizedChi2() < muon_chi2 &&
         muons_iter->nTrackerLayersWithMeasurement() > muon_trackLayers &&
         muons_iter->nValidPixelHits() > muon_pixelHits &&
         muons_iter->nValidRecoMuonHits() > muon_muonHits &&
-        muons_iter->nRecoMuonMatchedStations() > muon_matchedStation)
+        muons_iter->nRecoMuonMatchedStations() > muon_matchedStation &&
+        muons_iter->trackIso() < muon_iso_max &&
+        isPFMuon == true) 
     {
       offlineMuon = true;
       selectedMuons.push_back(&(*muons_iter));
@@ -425,10 +554,18 @@ void TriggerEffs::beginJob() {
   objectTree->Branch("ht",&ht, "ht/F" );
   objectTree->Branch("ht_raw",&ht_raw, "ht_raw/F" );
 
+  objectTree->Branch("L1_HTT280er",&L1_HTT280er, "L1_HTT280er/O" );
+  objectTree->Branch("L1_ETT2000",&L1_ETT2000, "L1_ETT2000/O" );
+  objectTree->Branch("L1_SingleJet180",&L1_SingleJet180, "L1_SingleJet180/O" );
+  objectTree->Branch("L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5",&L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5, "L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5/O" );
+
   objectTree->Branch("passHTTrigger",&passHTTrigger, "passHTTrigger/O" );
   objectTree->Branch("passMuonTrigger",&passMuonTrigger, "passMuonTrigger/O" );
   objectTree->Branch("offlineMuon",&offlineMuon, "offlineMuon/O" );
   objectTree->Branch("finalMuon",&finalMuon, "finalMuon/O" );
+
+  objectTree->Branch("observedPU", &observedPU, "observedPU/I");
+  objectTree->Branch("truePU", &truePU, "truePU/I");
 
   objectTree->Branch("nMuons",&nMuons, "nMuons/I" );
   objectTree->Branch("nSelectedMuons",&nSelectedMuons, "nSelectedMuons/I" );
@@ -457,6 +594,10 @@ void TriggerEffs::beginJob() {
   objectTree->Branch("mu2_muonHits",&mu2_muonHits, "mu2_muonHits/I" );
   objectTree->Branch("mu2_matchedStation",&mu2_matchedStation, "mu2_matchedStation/I" );
 
+  objectTree->Branch("nPFMuons",&nPFMuons, "nPFMuons/I" );
+  objectTree->Branch("muonsIsoCustom", &muonsIsoCustom);
+  objectTree->Branch("muonsIsoDefault", &muonsIsoDefault);
+  objectTree->Branch("isPFMuons", &isPFMuons);
 
 }
 

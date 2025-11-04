@@ -11,7 +11,7 @@ options.register('lumi',
                  "Integrated luminosity for weighting"
     )
 options.register('crossSection',
-                 1,
+                 883.7,
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.float,
                  "Cross Section for weighting"
@@ -31,7 +31,7 @@ process.options = cms.untracked.PSet(
 process.MessageLogger.cerr.FwkSummary.reportEvery = 100
 process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(1000) )
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(2000) )
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
@@ -81,14 +81,18 @@ process.triggerEffs = cms.EDAnalyzer('TriggerEffs',
                                      l1Seeds           = cms.vstring(L1Info),
                                      pfjets            = pfjetsTag,
                                      generatorName = cms.InputTag('generator'),
+                                     truePileup        = truePileupTag,
                                      scoutingMuon = cms.InputTag('hltScoutingMuonPackerNoVtx'), #remove the NoVtx if 2023 data
-                                     muon_pt = cms.double(27),
+                                     scoutingParticle = cms.InputTag("hltScoutingPFPacker"),
+                                     muon_pt = cms.double(20),
                                      muon_eta = cms.double(2.4),
                                      muon_chi2 = cms.double(10),
                                      muon_trackLayers = cms.int32(5),
                                      muon_pixelHits = cms.int32(0),
                                      muon_muonHits = cms.int32(0),
                                      muon_matchedStation = cms.int32(1),
+                                     matchingTolerance = cms.double(0.1),
+                                     muon_iso_max = cms.double(0.10)
                                      )
 
 
