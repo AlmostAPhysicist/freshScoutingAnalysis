@@ -15,7 +15,7 @@ for mStop in "${mStops[@]}"; do
             sed -e "s|ChangeMstop|$mStop|g" \
             -e "s|ChangeMso|$mSo|g" \
             -e "s|ChangeCtau|$ctau|g" \
-            Stealth${Model}.py > Stealth${Model}_mStop-${mStop}_mSo-${mSo}_ctau-${ctauLabel}.py
+            Stealth${Model}_TEMPLATE.py > Stealth${Model}_mStop-${mStop}_mSo-${mSo}_ctau-${ctauLabel}.py
 
             echo "Generated fragment for Stealth${Model} with mStop = ${mStop}, mSo = ${mSo}, ctau = ${ctau}"
         done
