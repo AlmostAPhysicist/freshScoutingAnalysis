@@ -58,7 +58,11 @@
 #include "TrackingTools/Records/interface/TransientTrackRecord.h"
 #include "TrackingTools/TransientTrack/interface/TransientTrack.h"
 #include "TrackingTools/TransientTrack/interface/TransientTrackBuilder.h"
-
+#include "SimDataFormats/GeneratorProducts/interface/GenEventInfoProduct.h"
+#include "TH1.h"
+#include "FWCore/ServiceRegistry/interface/Service.h"
+#include "CommonTools/UtilAlgos/interface/TFileService.h"
+#include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
 using namespace edm;
 
 //
@@ -78,9 +82,35 @@ private:
   typedef std::vector<reco::TrackRef> track_vec;
 
   void beginStream(edm::StreamID) override;
-  void produce(edm::Event&, const edm::EventSetup&) override;
   void endStream() override;
+  void produce(edm::Event&, const edm::EventSetup&) override;
 
+  const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
+  double luminosity;
+  double crossSection;
+  const edm::EDGetTokenT<std::vector<PileupSummaryInfo>> truePileupToken;
+  int truePU;
+  std::vector<double> PUCorrectionArray;
+  bool isMC;
+
+  TH1D* h_dxyErr_weighted_sum_barrel;
+  TH1D* h_dszErr_weighted_sum_barrel;
+  TH1D* h_dszdxyCov_weighted_sum_barrel;
+  TH1D* h_dxyErr_weighted_sq_sum_barrel;
+  TH1D* h_dszErr_weighted_sq_sum_barrel;
+  TH1D* h_dszdxyCov_weighted_sq_sum_barrel;
+  TH1D* h_weight_sum_barrel;
+  TH1D* h_weight_sq_sum_barrel;
+
+  TH1D* h_dxyErr_weighted_sum_disk;
+  TH1D* h_dszErr_weighted_sum_disk;
+  TH1D* h_dszdxyCov_weighted_sum_disk;
+  TH1D* h_dxyErr_weighted_sq_sum_disk;
+  TH1D* h_dszErr_weighted_sq_sum_disk;
+  TH1D* h_dszdxyCov_weighted_sq_sum_disk;
+  TH1D* h_weight_sum_disk;
+  TH1D* h_weight_sq_sum_disk;
+  
   const double pt_min_cut;
   const double dxySig_min_cut;
   const double dxySig_max_cut;
@@ -118,7 +148,7 @@ private:
 
   VertexDistanceXY vertex_dist_2d;
   VertexDistance3D vertex_dist_3d;
-
+  
   bool is_track_subset(const track_set & a, const track_set & b) const {
     bool is_subset = true;
     const track_set& smaller = a.size() <= b.size() ? a : b;
@@ -204,6 +234,12 @@ private:
 
 Vertexer::Vertexer(edm::ParameterSet const& params)
   :
+  GeneratorToken_(consumes(params.getParameter<edm::InputTag>("generatorName"))),
+  luminosity(params.existsAs<double>("luminosity") ? params.getParameter<double>  ("luminosity") : 1.0),
+  crossSection(params.existsAs<double>("crossSection") ? params.getParameter<double>  ("crossSection") : 1.0),
+  truePileupToken(consumes<std::vector<PileupSummaryInfo>>(params.getParameter<edm::InputTag>("truePileup"))),
+  PUCorrectionArray(params.getParameter<std::vector<double>>("PUCorrectionArray")),
+  isMC(params.existsAs<bool>("isMC") ?  params.getParameter<bool>  ("isMC") : false),
   pt_min_cut(params.getParameter<double>("pt_min_cut")),
   dxySig_min_cut(params.getParameter<double>("dxySig_min_cut")),
   dxySig_max_cut(params.getParameter<double>("dxySig_max_cut")),
@@ -269,6 +305,27 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   const double bsy = beamspot->position().y();
   const double bsz = beamspot->position().z();
   const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
+
+  double genWeight = 1.0;
+  double weight = 1.0;
+  
+  if(isMC){
+    edm::Handle<GenEventInfoProduct> generatorHandle;
+    iEvent.getByToken(GeneratorToken_, generatorHandle);
+    genWeight = generatorHandle->weight();
+    weight = genWeight*luminosity*crossSection;
+
+    edm::Handle<std::vector<PileupSummaryInfo>> pileup;
+    iEvent.getByToken(truePileupToken, pileup);
+    std::vector<PileupSummaryInfo>::const_iterator pileupIter;
+    for(pileupIter = pileup->begin(); pileupIter != pileup->end(); ++pileupIter){
+      if (pileupIter->getBunchCrossing() == 0) {
+	truePU = pileupIter->getTrueNumInteractions();
+      }
+    }
+    if(truePU>99) truePU = 99;
+    weight *= PUCorrectionArray[truePU];
+  }
   
   //Get the Transient Track Builder
   auto const &tt_builder = iSetup.getData(token_builder);
@@ -287,8 +344,31 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     std::pair<bool, Measurement1D> ttk_dist = IPTools::absoluteTransverseImpactParameter(ttk, fake_bs_vtx);
     //std::pair<bool, Measurement1D> ttk_dist = track_dist(ttk, fake_bs_vtx);
     float IP_sig = ttk_dist.second.significance();
-    if ((IP_sig > dxySig_min_cut) && (tk_ref->pt()>pt_min_cut) && (tk_ref->hitPattern().numberOfValidPixelHits() > npixelHits_min_cut) && (tk_ref->hitPattern().trackerLayersWithMeasurement() > ntrackerLayers_min_cut)){
-      if(((dxySig_max_cut>0) && (IP_sig < dxySig_max_cut)) || (dxySig_max_cut<0)){
+    if ((tk_ref->pt()>pt_min_cut) && (tk_ref->hitPattern().numberOfValidPixelHits() > npixelHits_min_cut) && (tk_ref->hitPattern().numberOfValidStripHits() > nstripHits_min_cut) && (tk_ref->hitPattern().trackerLayersWithMeasurement() > ntrackerLayers_min_cut) && (fabs(tk_ref->eta())<2.4)){
+      //if ((tk_ref->pt()>0.9) && (fabs(tk_ref->eta())<2.4)){
+      if(fabs(tk_ref->eta())<1.5){
+	h_dxyErr_weighted_sum_barrel->Fill(tk_ref->pt(),weight*tk_ref->dxyError());
+	h_dszErr_weighted_sum_barrel->Fill(tk_ref->pt(),weight*tk_ref->dszError());
+	h_dszdxyCov_weighted_sum_barrel->Fill(tk_ref->pt(),weight*fabs(tk_ref->covariance(3,4)));
+	h_dxyErr_weighted_sq_sum_barrel->Fill(tk_ref->pt(),weight*pow(tk_ref->dxyError(),2));
+	h_dszErr_weighted_sq_sum_barrel->Fill(tk_ref->pt(),weight*pow(tk_ref->dszError(),2));
+	h_dszdxyCov_weighted_sq_sum_barrel->Fill(tk_ref->pt(),weight*pow(tk_ref->covariance(3,4),2));
+	h_weight_sum_barrel->Fill(tk_ref->pt(),weight);
+	h_weight_sq_sum_barrel->Fill(tk_ref->pt(),pow(weight,2));
+      }
+      else{
+	h_dxyErr_weighted_sum_disk->Fill(tk_ref->pt(),weight*tk_ref->dxyError());
+	h_dszErr_weighted_sum_disk->Fill(tk_ref->pt(),weight*tk_ref->dszError());
+	h_dszdxyCov_weighted_sum_disk->Fill(tk_ref->pt(),weight*fabs(tk_ref->covariance(3,4)));
+	h_dxyErr_weighted_sq_sum_disk->Fill(tk_ref->pt(),weight*pow(tk_ref->dxyError(),2));
+	h_dszErr_weighted_sq_sum_disk->Fill(tk_ref->pt(),weight*pow(tk_ref->dszError(),2));
+	h_dszdxyCov_weighted_sq_sum_disk->Fill(tk_ref->pt(),weight*pow(tk_ref->covariance(3,4),2));
+	h_weight_sum_disk->Fill(tk_ref->pt(),weight);
+	h_weight_sq_sum_disk->Fill(tk_ref->pt(),pow(weight,2));
+      }
+      
+      if((((dxySig_max_cut>0) && (IP_sig < dxySig_max_cut)) || (dxySig_max_cut<=0)) && (IP_sig > dxySig_min_cut)){
+	//if(IP_sig > 2){
 	seed_track_refs.push_back(tk_ref);
 	seed_track_index_map[tk_ref] = i_tk;
       }
@@ -711,8 +791,9 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 
       std::vector<reco::TransientTrack> ttks_shift;
       for (size_t i = 0; i < ntks; ++i) {
-	double shift3DErr = shift3DVec[seed_track_index_map[tks[i]]].second;
-	if(max_nm1_refit_dist3 > 0 && shift3DErr < max_nm1_refit_dist3){
+	//double shift3DErr = shift3DVec[seed_track_index_map[tks[i]]].second;
+	double shift3DValue = shift3DVec[seed_track_index_map[tks[i]]].first;
+	if(max_nm1_refit_dist3 > 0 && shift3DValue < max_nm1_refit_dist3){
 	  ttks_shift.push_back(tt_builder.build(tks[i]));
 	}
       }
@@ -833,11 +914,76 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 // ------------ method called once each stream before processing any runs, lumis or events  ------------
 void Vertexer::beginStream(edm::StreamID) {
   // please remove this method if not needed
+  edm::Service<TFileService> fs;
+  h_dxyErr_weighted_sum_barrel = fs->make<TH1D>("dxyErr_weighted_sum_barrel",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszErr_weighted_sum_barrel = fs->make<TH1D>("dszErr_weighted_sum_barrel",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszdxyCov_weighted_sum_barrel = fs->make<TH1D>("dszdxyCov_weighted_sum_barrel",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dxyErr_weighted_sq_sum_barrel = fs->make<TH1D>("dxyErr_weighted_sq_sum_barrel",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszErr_weighted_sq_sum_barrel = fs->make<TH1D>("dszErr_weighted_sq_sum_barrel",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszdxyCov_weighted_sq_sum_barrel = fs->make<TH1D>("dszdxyCov_weighted_sq_sum_barrel",";Track p_{T}; Weighted Sum",200,0,200);
+  h_weight_sum_barrel = fs->make<TH1D>("weight_sum_barrel",";Track p_{T}; Weight Sum",200,0,200);
+  h_weight_sq_sum_barrel = fs->make<TH1D>("weight_sq_sum_barrel",";Track p_{T}; Weight Squared Sum",200,0,200);
+
+  h_dxyErr_weighted_sum_disk = fs->make<TH1D>("dxyErr_weighted_sum_disk",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszErr_weighted_sum_disk = fs->make<TH1D>("dszErr_weighted_sum_disk",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszdxyCov_weighted_sum_disk = fs->make<TH1D>("dszdxyCov_weighted_sum_disk",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dxyErr_weighted_sq_sum_disk = fs->make<TH1D>("dxyErr_weighted_sq_sum_disk",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszErr_weighted_sq_sum_disk = fs->make<TH1D>("dszErr_weighted_sq_sum_disk",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszdxyCov_weighted_sq_sum_disk = fs->make<TH1D>("dszdxyCov_weighted_sq_sum_disk",";Track p_{T}; Weighted Sum",200,0,200);
+  h_weight_sum_disk = fs->make<TH1D>("weight_sum_disk",";Track p_{T}; Weight Sum",200,0,200);
+  h_weight_sq_sum_disk = fs->make<TH1D>("weight_sq_sum_disk",";Track p_{T}; Weight Squared Sum",200,0,200);
 }
 
 // ------------ method called once each stream after processing all runs, lumis and events  ------------
 void Vertexer::endStream() {
   // please remove this method if not needed
+  h_dxyErr_weighted_sum_barrel->Draw();
+  h_dxyErr_weighted_sum_barrel->Write();
+  
+  h_dszErr_weighted_sum_barrel->Draw();
+  h_dszErr_weighted_sum_barrel->Write();
+  
+  h_dszdxyCov_weighted_sum_barrel->Draw();
+  h_dszdxyCov_weighted_sum_barrel->Write();
+
+  h_dxyErr_weighted_sq_sum_barrel->Draw();
+  h_dxyErr_weighted_sq_sum_barrel->Write();
+  
+  h_dszErr_weighted_sq_sum_barrel->Draw();
+  h_dszErr_weighted_sq_sum_barrel->Write();
+  
+  h_dszdxyCov_weighted_sq_sum_barrel->Draw();
+  h_dszdxyCov_weighted_sq_sum_barrel->Write();
+  
+  h_weight_sum_barrel->Draw();
+  h_weight_sum_barrel->Write();
+  
+  h_weight_sq_sum_barrel->Draw();
+  h_weight_sq_sum_barrel->Write();
+
+  h_dxyErr_weighted_sum_disk->Draw();
+  h_dxyErr_weighted_sum_disk->Write();
+  
+  h_dszErr_weighted_sum_disk->Draw();
+  h_dszErr_weighted_sum_disk->Write();
+  
+  h_dszdxyCov_weighted_sum_disk->Draw();
+  h_dszdxyCov_weighted_sum_disk->Write();
+
+  h_dxyErr_weighted_sq_sum_disk->Draw();
+  h_dxyErr_weighted_sq_sum_disk->Write();
+  
+  h_dszErr_weighted_sq_sum_disk->Draw();
+  h_dszErr_weighted_sq_sum_disk->Write();
+  
+  h_dszdxyCov_weighted_sq_sum_disk->Draw();
+  h_dszdxyCov_weighted_sq_sum_disk->Write();
+  
+  h_weight_sum_disk->Draw();
+  h_weight_sum_disk->Write();
+  
+  h_weight_sq_sum_disk->Draw();
+  h_weight_sq_sum_disk->Write();
 }
 
 // ------------ method called when starting to processes a run  ------------

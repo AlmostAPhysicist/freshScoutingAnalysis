@@ -1,6 +1,7 @@
 import FWCore.ParameterSet.Config as cms
 import os
 import FWCore.ParameterSet.VarParsing as VarParsing
+import numpy as np
 
 process = cms.Process("DisplacedVertexNtupleMaker")
 options = VarParsing.VarParsing ('analysis')
@@ -35,6 +36,12 @@ options.register('isMC',
                  VarParsing.VarParsing.varType.bool,
                  "If using MC or data"
     )
+options.register('PUFile',
+                 'PURatio_Full2024.npy',
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.string,
+                 "Name of pileup correction file to use"
+    )
 
 options.parseArguments()
 process.load("FWCore.MessageService.MessageLogger_cfi")
@@ -44,12 +51,13 @@ process.options = cms.untracked.PSet(
 process.MessageLogger.cerr.FwkSummary.reportEvery = 100
 process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(1000) )
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
+PUCorrectionData = np.load(options.PUFile)
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
         #MC test file
-        '/store/mc/RunIII2024Summer24MiniAOD/QCD-4Jets_Bin-HT-1000to1200_TuneCP5_13p6TeV_madgraphMLM-pythia8/MINIAODSIM/140X_mcRun3_2024_realistic_v26-v2/100000/00f7403b-49bf-4efd-9b8f-0398bd61d910.root'
+        #'/store/mc/RunIII2024Summer24MiniAOD/QCD-4Jets_Bin-HT-1000to1200_TuneCP5_13p6TeV_madgraphMLM-pythia8/MINIAODSIM/140X_mcRun3_2024_realistic_v26-v2/100000/00f7403b-49bf-4efd-9b8f-0398bd61d910.root'
         #'/store/user/brlopesd/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_v2/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_miniAOD_v2/250214_150834/0000/stop_dbar_miniAOD_1.root'
         #Data test file
         #'/store/data/Run2024D/ScoutingPFRun3/HLTSCOUT/v1/000/380/945/00000/cdf45723-07c4-4b41-9595-f368f2929369.root'
@@ -143,6 +151,8 @@ process.triggerFilter = cms.EDFilter('TriggerFilter',
                                      isScouting = cms.bool(options.isScouting),
                                      luminosity = cms.double(options.lumi), #2024 luminosity (fb-1)
                                      crossSection = cms.double(options.crossSection), # cross section in fb
+                                     truePileup        = truePileupTag,
+                                     PUCorrectionArray = cms.vdouble(*PUCorrectionData.flatten().tolist()),
                                      l1Seeds           = cms.vstring(L1Info),
                                      pfjets            = pfjetsTag,
                                      patjets           = patjetsTag,
@@ -152,12 +162,18 @@ process.triggerFilter = cms.EDFilter('TriggerFilter',
                                      )
 
 process.Vertexer = cms.EDProducer('Vertexer',
+                                  generatorName = cms.InputTag('generator'),
+                                  luminosity = cms.double(options.lumi), #2024 luminosity (fb-1)
+                                  crossSection = cms.double(options.crossSection), # cross section in fb
+                                  truePileup        = truePileupTag,
+                                  PUCorrectionArray = cms.vdouble(*PUCorrectionData.flatten().tolist()),
+                                  isMC = cms.bool(options.isMC),
                                   seed_tracks_src = cms.InputTag('hltScoutingUnpackProducer', 'Track'),
                                   pt_min_cut = cms.double(1.0),
-                                  dxySig_min_cut = cms.double(2.5),
-                                  dxySig_max_cut = cms.double(5.0), #dxySig between 0.5 and 2.5 for a control region
-                                  npixelHits_min_cut = cms.int32(1),
-                                  nstripHits_min_cut = cms.int32(0),
+                                  dxySig_min_cut = cms.double(2.0),
+                                  dxySig_max_cut = cms.double(4.0), #dxySig between 0.5 and 2.5 for a control region
+                                  npixelHits_min_cut = cms.int32(2),
+                                  nstripHits_min_cut = cms.int32(1),
                                   ntrackerLayers_min_cut = cms.int32(5),
                                   #kvr_params = kvr_params,
                                   #do_track_refinement = cms.bool(False), # remove tracks + trim out tracks with IP significance larger than trackrefine_sigmacut and trackrefine_trimmax, respectively
@@ -174,12 +190,12 @@ process.Vertexer = cms.EDProducer('Vertexer',
                                   merge_anyway_dist = cms.double(-1),
                                   merge_anyway_sig = cms.double(4), # merging criteria for loose merging (*only* if resolve_split_vertices_loose is True)
                                   merge_shared_dist = cms.double(-1),
-                                  merge_shared_sig = cms.double(4), # default merging shared-track vertices
+                                  merge_shared_sig = cms.double(3), # default merging shared-track vertices
                                   max_track_vertex_dist = cms.double(-1),
                                   max_track_vertex_sig = cms.double(5), # default track arbitration
-                                  min_track_vertex_sig_to_remove = cms.double(1.5), # default track arbitration
+                                  min_track_vertex_sig_to_remove = cms.double(2.0), # default track arbitration
                                   remove_one_track_at_a_time = cms.bool(True),
-                                  max_nm1_refit_dist3 = cms.double(0.002),
+                                  max_nm1_refit_dist3 = cms.double(0.003),
                                   max_nm1_refit_distz = cms.double(-1),
                                   max_nm1_refit_count = cms.int32(-1),
                                   #trackrefine_sigmacut = cms.double(5), # track refinement criteria (*only* if do_track_refinement = True)
@@ -189,7 +205,7 @@ process.Vertexer = cms.EDProducer('Vertexer',
 
 process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       isMC = cms.bool(options.isMC),
-                                      required_ntk     = cms.int32(4),
+                                      required_ntk     = cms.int32(3),
                                       triggerresults   = cms.InputTag("TriggerResults", "", "HLT"),
                                       ReadPrescalesFromFile = cms.bool( False ),
                                       AlgInputTag       = cms.InputTag("gtStage2Digis"),
@@ -199,9 +215,10 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       isScouting = cms.bool(options.isScouting),
                                       doPhiCorrection = cms.bool( False ),
                                       doGenMatching = cms.bool( False ),
-                                      fillScoutTrack = cms.bool( True ),
+                                      fillScoutTrack = cms.bool( False ),
                                       luminosity = cms.double(options.lumi), #2024 luminosity (fb-1)
                                       crossSection = cms.double(options.crossSection), # cross section in fb
+                                      PUCorrectionArray = cms.vdouble(*PUCorrectionData.flatten().tolist()),
                                       truePileup        = truePileupTag,
                                       l1Seeds           = cms.vstring(L1Info),
                                       muons             = cms.InputTag("hltScoutingMuonPacker"),

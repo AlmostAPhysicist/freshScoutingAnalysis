@@ -148,6 +148,7 @@ private:
   bool fillScoutTrack;
   double luminosity;
   double crossSection;
+  std::vector<double> PUCorrectionArray;
   double isMC;
   triggerExpression::Data triggerCache_;
 
@@ -240,6 +241,9 @@ private:
   std::vector<float>* scoutTrack_dz;
   std::vector<float>* scoutTrack_dzErr;
   std::vector<float>* scoutTrack_dzSig;
+  std::vector<float>* scoutTrack_dszUncertainty;
+  std::vector<float>* scoutTrack_dxyUncertainty;
+  std::vector<float>* scoutTrack_dszdxyCovariance;
   std::vector<float>* scoutTrack_vx;
   std::vector<float>* scoutTrack_vy;
   std::vector<int>* scoutTrack_nValidPixelHits;
@@ -584,6 +588,7 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   fillScoutTrack       (iConfig.existsAs<bool>("fillScoutTrack")   ?    iConfig.getParameter<bool>  ("fillScoutTrack") : false),
   luminosity          (iConfig.existsAs<double>("luminosity")    ?    iConfig.getParameter<double>  ("luminosity") : 1.0),
   crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0),
+  PUCorrectionArray(iConfig.getParameter<std::vector<double>>("PUCorrectionArray")),
   isMC                    (iConfig.existsAs<bool>("isMC")               ?    iConfig.getParameter<bool>  ("isMC")            : false)
 {
     usesResource("TFileService");
@@ -633,6 +638,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   scoutTrack_dz->clear();
   scoutTrack_dzErr->clear();
   scoutTrack_dzSig->clear();
+  scoutTrack_dszUncertainty->clear();
+  scoutTrack_dxyUncertainty->clear();
+  scoutTrack_dszdxyCovariance->clear();
   scoutTrack_vx->clear();
   scoutTrack_vy->clear();
   scoutTrack_nValidPixelHits->clear();
@@ -755,6 +763,18 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     genWeight = generatorHandle->weight();
     h_genWeights->Fill("None",genWeight);
     theWeight = genWeight*luminosity*crossSection;
+
+    edm::Handle<std::vector<PileupSummaryInfo>> pileup;
+    iEvent.getByToken(truePileupToken, pileup);
+    std::vector<PileupSummaryInfo>::const_iterator pileupIter;
+    for(pileupIter = pileup->begin(); pileupIter != pileup->end(); ++pileupIter){
+      if (pileupIter->getBunchCrossing() == 0) {
+	truePU = pileupIter->getTrueNumInteractions();
+      }
+    }
+    if(truePU>99) truePU = 99;
+    theWeight *= PUCorrectionArray[truePU];
+    
     h_weights->Fill("None",theWeight);
     h_weightsSquared->Fill("None",pow(theWeight,2));
   }
@@ -840,6 +860,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       scoutTrack_dz->push_back(dz);
       scoutTrack_dzErr->push_back(scoutingTrackIter->dzError());
       scoutTrack_dzSig->push_back(dz/scoutingTrackIter->dzError());
+      scoutTrack_dszUncertainty->push_back(scoutingTrackIter->dszError());
+      scoutTrack_dxyUncertainty->push_back(scoutingTrackIter->dxyError());
+      scoutTrack_dszdxyCovariance->push_back(scoutingTrackIter->covariance(3,4));
       scoutTrack_vx->push_back(scoutingTrackIter->vx());
       scoutTrack_vy->push_back(scoutingTrackIter->vy());
       edm::Ref<std::vector<reco::Track>> trackRef(ScoutingTrackHandle, i_tk);
@@ -1652,6 +1675,9 @@ void ScoutingTreeMakerRun3::beginJob() {
     scoutTrack_dz = new std::vector<float>;
     scoutTrack_dzErr = new std::vector<float>;
     scoutTrack_dzSig = new std::vector<float>;
+    scoutTrack_dszUncertainty = new std::vector<float>;
+    scoutTrack_dxyUncertainty = new std::vector<float>;
+    scoutTrack_dszdxyCovariance = new std::vector<float>;
     scoutTrack_vx = new std::vector<float>;
     scoutTrack_vy = new std::vector<float>;
     scoutTrack_nValidPixelHits = new std::vector<int>;
@@ -1811,6 +1837,9 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutTrack_dz",&scoutTrack_dz);
     objectTree->Branch("scoutTrack_dzErr",&scoutTrack_dzErr);
     objectTree->Branch("scoutTrack_dzSig",&scoutTrack_dzSig);
+    objectTree->Branch("scoutTrack_dszUncertainty",&scoutTrack_dszUncertainty);
+    objectTree->Branch("scoutTrack_dxyUncertainty",&scoutTrack_dxyUncertainty);
+    objectTree->Branch("scoutTrack_dszdxyCovariance",&scoutTrack_dszdxyCovariance);
     objectTree->Branch("scoutTrack_vx",&scoutTrack_vx);
     objectTree->Branch("scoutTrack_vy",&scoutTrack_vy);
     objectTree->Branch("scoutTrack_nValidPixelHits",&scoutTrack_nValidPixelHits);
@@ -2047,6 +2076,9 @@ void ScoutingTreeMakerRun3::endJob() {
   delete scoutTrack_dz;
   delete scoutTrack_dzErr;
   delete scoutTrack_dzSig;
+  delete scoutTrack_dszUncertainty;
+  delete scoutTrack_dxyUncertainty;
+  delete scoutTrack_dszdxyCovariance;
   delete scoutTrack_vx;
   delete scoutTrack_vy;
   delete scoutTrack_nValidPixelHits;

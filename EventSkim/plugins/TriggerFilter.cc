@@ -46,6 +46,7 @@
 #include "TMath.h"
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
+#include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
 //
 // class declaration
 //
@@ -76,6 +77,9 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources> {
 
       double luminosity;
       double crossSection;
+      const edm::EDGetTokenT<std::vector<PileupSummaryInfo>> truePileupToken;
+      int truePU;
+      std::vector<double> PUCorrectionArray;
       edm::InputTag algInputTag_;
       edm::InputTag extInputTag_;
       edm::EDGetToken algToken_;
@@ -119,7 +123,9 @@ TriggerFilter::TriggerFilter(const edm::ParameterSet& iConfig):
   GenJetToken_(consumes(iConfig.getParameter<edm::InputTag>("genJet_src"))),
   triggerResultsToken(consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("triggerresults"))),
   luminosity(iConfig.existsAs<double>("luminosity") ? iConfig.getParameter<double>  ("luminosity") : 1.0),
-  crossSection(iConfig.existsAs<double>("crossSection") ? iConfig.getParameter<double>  ("crossSection") : 1.0),  
+  crossSection(iConfig.existsAs<double>("crossSection") ? iConfig.getParameter<double>  ("crossSection") : 1.0),
+  truePileupToken(consumes<std::vector<PileupSummaryInfo>>(iConfig.getParameter<edm::InputTag>("truePileup"))),
+  PUCorrectionArray(iConfig.getParameter<std::vector<double>>("PUCorrectionArray")),
   isScouting(iConfig.existsAs<bool>("isScouting") ? iConfig.getParameter<bool>  ("isScouting") : false),
   isMC(iConfig.existsAs<bool>("isMC") ?  iConfig.getParameter<bool>  ("isMC") : false),
   storeGenJets(iConfig.existsAs<bool>("storeGenJets") ? iConfig.getParameter<bool>  ("storeGenJets") : false)
@@ -178,6 +184,18 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     genWeight = generatorHandle->weight();
     h_genWeights->Fill("None",genWeight);
     theWeight = genWeight*luminosity*crossSection;
+
+    edm::Handle<std::vector<PileupSummaryInfo>> pileup;
+    iEvent.getByToken(truePileupToken, pileup);
+    std::vector<PileupSummaryInfo>::const_iterator pileupIter;
+    for(pileupIter = pileup->begin(); pileupIter != pileup->end(); ++pileupIter){
+      if (pileupIter->getBunchCrossing() == 0) {
+	truePU = pileupIter->getTrueNumInteractions();
+      }
+    }
+    if(truePU>99) truePU = 99;
+    theWeight *= PUCorrectionArray[truePU];
+
     h_weights->Fill("None",theWeight);
     h_weightsSquared->Fill("None",pow(theWeight,2));
   }

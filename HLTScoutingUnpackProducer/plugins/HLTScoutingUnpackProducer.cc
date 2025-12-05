@@ -472,9 +472,9 @@ void HLTScoutingUnpackProducer::buildHitPattern(Run3ScoutingParticle const& scou
             break;
     };
     //if((number_of_pixel_hits!=recoTrack.hitPattern().numberOfValidPixelHits()) || (number_of_strip_hits!=recoTrack.hitPattern().numberOfValidStripHits()) || (number_of_tracker_layers_with_measurement!=recoTrack.hitPattern().trackerLayersWithMeasurement())){
-      //std::cout << "pixel hits expected: " << number_of_pixel_hits << " get: " << recoTrack.hitPattern().numberOfValidPixelHits() << " strip hits expected: " << number_of_strip_hits << " get: " << recoTrack.hitPattern().numberOfValidStripHits();
-      //std::cout << " layers with measurement expect: " << number_of_tracker_layers_with_measurement << " get: " << recoTrack.hitPattern().trackerLayersWithMeasurement() << std::endl;
-      //std::cout<<"missing inner hits: "<<(int) lost_inner_hits<<" number of pixel layers with measurement: "<<number_of_pixel_layers_with_measurement<<" number of strip layers with measurement: "<<number_of_strip_layers_with_measurement<<std::endl;
+    //std::cout << "pixel hits expected: " << number_of_pixel_hits << " get: " << recoTrack.hitPattern().numberOfValidPixelHits() << " strip hits expected: " << number_of_strip_hits << " get: " << recoTrack.hitPattern().numberOfValidStripHits();
+    //std::cout << " layers with measurement expect: " << number_of_tracker_layers_with_measurement << " get: " << recoTrack.hitPattern().trackerLayersWithMeasurement() << std::endl;
+    //std::cout<<"missing inner hits: "<<(int) lost_inner_hits<<" number of pixel layers with measurement: "<<number_of_pixel_layers_with_measurement<<" number of strip layers with measurement: "<<number_of_strip_layers_with_measurement<<std::endl;
     //}
 }
 

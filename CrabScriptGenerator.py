@@ -54,15 +54,30 @@ inputDatasets = ["/QCD-4Jets_Bin-HT-200to400_TuneCP5_13p6TeV_madgraphMLM-pythia8
                  ]
 
 crossSections = [1961000000, 95620000, 13540000, 3033000, 883700, 383500, 125200, 26490, 311400000000, 58500000000, 25400000000, 762100, 762100] #Backgrounds should go first in dataset list with corresponding cross sections listed here
-tagSuffix = "v21-2p5to5Dxy"
+tagSuffix = "v22-2to4Dxy"
 scouting = True
 
 for i in range(len(inputDatasets)):
     dataset = inputDatasets[i]
     if ("TTto" in dataset) or ("QCD" in dataset):
         crossSection = crossSections[i]
+        PUFile = "PURatio_Full2024.npy"
+    elif ("GluGluH" in dataset):
+        crossSection = 8000;
+        lifetime = dataset.split("-")[3]
+        mass = dataset.split("-")[7]
+        mass = mass.split("_")[0]
+        PUFile = f"Hto2Sto4D-cT{lifetime}-MS{mass}_PURatio_Full2024.npy"
+    elif ("ScoutingPF" in dataset):
+        crossSection = 1
+        PUFile = "empty.npy"
     else:
         crossSection = 1
+        mass = dataset.split("-")[1]
+        mass = mass[:3]
+        lifetime = dataset.split("-")[2]
+        lifetime = lifetime.split("mm")[0]
+        PUFile = f"Stop-M{mass}-cT{lifetime}_PURatio_Full2024.npy"
     if "Stop" in dataset:
         tag = dataset[1:].split("_Summer24")[0] + "_Tree_" + tagSuffix
         dataBase = "phys03"
@@ -109,7 +124,7 @@ config.Data.unitsPerJob = {unitsPerJob} \n
 config.Data.totalUnits = {totalUnits} \n
 config.Data.allowNonValidInputDataset = True \n
 config.Data.publication = False \n
-config.JobType.pyCfgParams = ['isScouting={scouting}','lumi=108.96','crossSection={crossSection}','isMC={isMC}','hasReco={hasReco}'] \n
+config.JobType.pyCfgParams = ['isScouting={scouting}','lumi=108.96','crossSection={crossSection}','isMC={isMC}','hasReco={hasReco}','PUFile=/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/{PUFile}'] \n
 config.Data.outputDatasetTag = theTag \n
 config.Data.outLFNDirBase = '/store/group/phys_exotica/DVScouting' \n
 config.Site.storageSite = 'T2_CH_CERN' \n
