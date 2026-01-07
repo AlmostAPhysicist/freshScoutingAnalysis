@@ -14,7 +14,7 @@ config.JobType.pluginName = 'Analysis'
 # Name of the CMSSW configuration file
 config.JobType.psetName = 'DIGIPremix-HLT_cfg.py'
 config.JobType.numCores = 4
-config.JobType.maxMemoryMB = 5000
+config.JobType.maxMemoryMB = 10000
 
 config.Data.inputDBS = 'phys03'
 config.Data.inputDataset = dset
