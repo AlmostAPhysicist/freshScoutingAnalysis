@@ -133,10 +133,49 @@ private:
   bool isMC;
   TTree* objectTree;
 
-  int nPFJets;
+  int nPFJets_nocut;
+  std::vector<float> Jet_pt_nocut;
+  std::vector<float> Jet_eta_nocut;
+  std::vector<float> Jet_phi_nocut;
+
+  int nPFJets_ht;
+  std::vector<float> Jet_pt_ht;
+  std::vector<float> Jet_eta_ht;
+  std::vector<float> Jet_phi_ht;
+
+  int nPFJets_jetVeto;
+  std::vector<float> Jet_pt_jetVeto;
+  std::vector<float> Jet_eta_jetVeto;
+  std::vector<float> Jet_phi_jetVeto;
+
+  int nPFJets_jetVeto_dR10;
+  std::vector<float> Jet_pt_jetVeto_dR10;
+  std::vector<float> Jet_eta_jetVeto_dR10;
+  std::vector<float> Jet_phi_jetVeto_dR10;
+
+  int nPFJets_jetVeto_dR15;
+  std::vector<float> Jet_pt_jetVeto_dR15;
+  std::vector<float> Jet_eta_jetVeto_dR15;
+  std::vector<float> Jet_phi_jetVeto_dR15;
+
+  int nPFJets_jetVeto_dR20;
+  std::vector<float> Jet_pt_jetVeto_dR20;
+  std::vector<float> Jet_eta_jetVeto_dR20;
+  std::vector<float> Jet_phi_jetVeto_dR20;
+
+  int nPFJets_jetVeto_dR25;
+  std::vector<float> Jet_pt_jetVeto_dR25;
+  std::vector<float> Jet_eta_jetVeto_dR25;
+  std::vector<float> Jet_phi_jetVeto_dR25;
 
   float ht;
   float ht_raw;
+  float ht_jetMap;
+  float ht_jetMap_dR10;
+  float ht_jetMap_dR15;
+  float ht_jetMap_dR20;
+  float ht_jetMap_dR25;
+
 
   bool L1_HTT280er;
   bool L1_ETT2000;
@@ -175,22 +214,6 @@ private:
   int mu1s_muonHits;
   int mu1s_matchedStation;
 
-  double mu1_pt;
-  double mu1_eta;
-  double mu1_chi2;
-  int mu1_trackLayers;
-  int mu1_pixelHits;
-  int mu1_muonHits;
-  int mu1_matchedStation;
-
-  double mu2_pt;
-  double mu2_eta;
-  double mu2_chi2;
-  int mu2_trackLayers;
-  int mu2_pixelHits;
-  int mu2_muonHits;
-  int mu2_matchedStation;
-
   bool passHTTrigger;
   bool passMuonTrigger;
 
@@ -203,6 +226,37 @@ private:
 
   bool offlineMuon;
   bool finalMuon;
+
+  //variables for the jet veto
+  TH2F* jetVetoMap_;
+  float Jet_eta;
+  float Jet_pt;
+  float Jet_phi;
+  int binX;
+  int binY;
+  float maskBit;
+  float energy;
+  float Jet_chHEF;
+  float Jet_neHEF;
+  float Jet_muEF;
+  float Jet_chEmEF;
+  float Jet_neEmEF;
+  int Jet_chMultiplicity;
+  int Jet_neMultiplicity;
+  bool Jet_passJetIdTight;
+  bool Jet_passJetIdTightLepVeto;
+  float dEta_jet_mu;
+  float dPhi_jet_mu;
+  float dR_jet_mu;
+
+  bool jetVeto;
+  bool jetVeto_dR10;
+  bool jetVeto_dR15;
+  bool jetVeto_dR20;
+  bool jetVeto_dR25;
+
+  std::vector<float> dRs;
+  float min_dR;
 
   double MuonTrackIso(Run3ScoutingMuon const& muonTrack, edm::Handle<std::vector<Run3ScoutingParticle>> const& scoutingParticleH){
 
@@ -357,14 +411,12 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
     std::vector<PileupSummaryInfo>::const_iterator pileupIter;
     for(pileupIter = pileup->begin(); pileupIter != pileup->end(); ++pileupIter){
       if (pileupIter->getBunchCrossing() == 0) {
-	observedPU = pileupIter->getPU_NumInteractions();
-	truePU = pileupIter->getTrueNumInteractions();
+        observedPU = pileupIter->getPU_NumInteractions();
+        truePU = pileupIter->getTrueNumInteractions();
       }
     }
     
   }
-    
-
 
   //Get jet info and calculate H_T
   nPFJets = -1;                                                                                                                
@@ -377,6 +429,7 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
   ht_raw = 0;
   ht = 0;
 
+  //HT calculated as in L1
   if(pfjetsH.isValid()){
     for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
       ht_raw = ht_raw + jets_iter->pt();
@@ -493,47 +546,102 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
     mu1s_matchedStation = mu->nRecoMuonMatchedStations();
   }
 
-
-  mu1_pt = -100;
-  mu1_eta = -100;
-  mu1_chi2 = -100;
-  mu1_trackLayers = -100;
-  mu1_pixelHits = -100;
-  mu1_muonHits = -100;
-  mu1_matchedStation = -100;
-
-  // Fill leading muon info if it exists
-  if (orderedMuons.size() > 0) {
-    const Run3ScoutingMuon* mu = orderedMuons[0];
-    mu1_pt = mu->pt();
-    mu1_eta = mu->eta();
-    mu1_chi2 = mu->normalizedChi2();
-    mu1_trackLayers = mu->nTrackerLayersWithMeasurement();
-    mu1_pixelHits = mu->nValidPixelHits();
-    mu1_muonHits = mu->nValidRecoMuonHits();
-    mu1_matchedStation = mu->nRecoMuonMatchedStations();
-  }
-
-  mu2_pt = -100;
-  mu2_eta = -100;
-  mu2_chi2 = -100;
-  mu2_trackLayers = -100;
-  mu2_pixelHits = -100;
-  mu2_muonHits = -100;
-  mu2_matchedStation = -100;
-
-  // Fill subleading muon info if it exists
-  if (orderedMuons.size() > 1) {
-    const Run3ScoutingMuon* mu = orderedMuons[1];
-    mu2_pt = mu->pt();
-    mu2_eta = mu->eta();
-    mu2_chi2 = mu->normalizedChi2();
-    mu2_trackLayers = mu->nTrackerLayersWithMeasurement();
-    mu2_pixelHits = mu->nValidPixelHits();
-    mu2_muonHits = mu->nValidRecoMuonHits();
-    mu2_matchedStation = mu->nRecoMuonMatchedStations();
-  }
   finalMuon = passMuonTrigger && offlineMuon;
+
+  ht_jetMap = 0;
+  ht_jetMap_dR10 = 0;
+  ht_jetMap_dR15 = 0;
+  ht_jetMap_dR20 = 0;
+  ht_jetMap_dR25 = 0;
+
+  jetVeto = false;
+  jetVeto_dR10 = false;
+  jetVeto_dR15 = false;
+  jetVeto_dR20 = false;
+  jetVeto_dR25 = false;
+
+  dRs.clear();
+
+    //Testing the jet requirements for the HT calculation
+  if(pfjetsH.isValid()){
+    for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
+      Jet_eta = jets_iter->eta();
+      Jet_pt = jets_iter->pt();
+      Jet_phi = jets_iter->phi();
+      if((Jet_pt > 30) && (abs(Jet_eta) < 2.4)){
+	      binX = jetVetoMap_->GetXaxis()->FindBin(Jet_eta);
+        binY = jetVetoMap_->GetYaxis()->FindBin(jets_iter->phi());
+        maskBit = jetVetoMap_->GetBinContent(binX, binY);
+
+        energy = TMath::Sqrt(pow(TMath::CosH(Jet_eta)*jets_iter->pt(),2)+pow(jets_iter->m(),2));
+        if(energy > 0){
+          Jet_chHEF = jets_iter->chargedHadronEnergy()/energy;
+          Jet_neHEF = jets_iter->neutralHadronEnergy()/energy;
+          Jet_muEF = jets_iter->muonEnergy()/energy;
+          Jet_chEmEF = jets_iter->electronEnergy()/energy;
+          Jet_neEmEF = (jets_iter->photonEnergy()+jets_iter->HFEMEnergy())/energy;
+          Jet_chMultiplicity = jets_iter->chargedHadronMultiplicity()+jets_iter->electronMultiplicity()+jets_iter->muonMultiplicity();
+          Jet_neMultiplicity = jets_iter->neutralHadronMultiplicity()+jets_iter->photonMultiplicity()+jets_iter->HFHadronMultiplicity()+jets_iter->HFEMMultiplicity();
+          Jet_passJetIdTight = false;
+
+          Jet_passJetIdTight = (Jet_neHEF < 0.99) && (Jet_neEmEF < 0.9) && (Jet_chMultiplicity+Jet_neMultiplicity > 1) && (Jet_chHEF > 0.01) && (Jet_chMultiplicity > 0);
+
+          Jet_passJetIdTightLepVeto = false;
+          Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF < 0.8) && (Jet_chEmEF < 0.8);
+          
+          if((maskBit==0) && Jet_passJetIdTightLepVeto && ((Jet_chEmEF+Jet_neEmEF)<0.9) ){
+            ht_jetMap = ht_jetMap + Jet_pt;
+            
+            bool dR10 = true;
+            bool dR15 = true;
+            bool dR20 = true;
+            bool dR25 = true;
+            
+            for (auto muon : selectedMuons) {
+                dEta_jet_mu = Jet_eta - muon->eta();
+                dPhi_jet_mu = deltaPhi(Jet_phi, muon->phi());
+                dR_jet_mu = sqrt(pow(dEta_jet_mu, 2) + pow(dPhi_jet_mu, 2));
+                dRs.push_back(dR_jet_mu);
+                if(dR_jet_mu < 0.10){
+                  dR10 = false;
+                  jetVeto_dR10 = true;
+                } 
+                if(dR_jet_mu < 0.15){
+                  dR15 = false;
+                  jetVeto_dR15 = true;
+                } 
+                if(dR_jet_mu < 0.20){
+                  dR20 = false;
+                  jetVeto_dR20 = true;
+                } 
+                if(dR_jet_mu < 0.25){
+                  dR25 = false;
+                  jetVeto_dR25 = true;
+                } 
+            }  
+
+            if(dR10) ht_jetMap_dR10 = ht_jetMap_dR10 + Jet_pt;
+            if(dR15) ht_jetMap_dR15 = ht_jetMap_dR15 + Jet_pt;
+            if(dR20) ht_jetMap_dR20 = ht_jetMap_dR20 + Jet_pt;
+            if(dR25) ht_jetMap_dR25 = ht_jetMap_dR25 + Jet_pt;
+            
+          }
+          else {
+            jetVeto = true;
+            jetVeto_dR10 = true;
+            jetVeto_dR15 = true;
+            jetVeto_dR20 = true;
+            jetVeto_dR25 = true;
+
+          }
+        }
+      }
+    }
+  }
+
+  //min_dR = *std::min_element(dRs.begin(), dRs.end());
+  auto min_dR_cand = std::min_element(dRs.begin(), dRs.end());
+  min_dR = (min_dR_cand == dRs.end()) ? -1.0f : *min_dR_cand;
 
   //std::cout<<"passMuonTrigger: "<< passMuonTrigger <<std::endl;
   //std::cout<<"offlineMuon: "<< offlineMuon <<std::endl;
@@ -547,12 +655,20 @@ void TriggerEffs::beginJob() {
   // please remove this method if not needed
   edm::Service<TFileService> fs;
   objectTree = fs->make<TTree>("objectTree","objectTree");
+
+  TFile* vetoFile = TFile::Open("Summer24Prompt24_RunBCDEFGHI.root", "READ");
+  jetVetoMap_ = (TH2F*)vetoFile->Get("jetvetomap");
   
   objectTree->Branch("genWeight",&genWeight, "genWeight/F" );
   objectTree->Branch("theWeight",&theWeight, "theWeight/F" );
   
   objectTree->Branch("ht",&ht, "ht/F" );
   objectTree->Branch("ht_raw",&ht_raw, "ht_raw/F" );
+  objectTree->Branch("ht_jetMap",&ht_jetMap, "ht_jetMap/F" );
+  objectTree->Branch("ht_jetMap_dR10",&ht_jetMap_dR10, "ht_jetMap_dR10/F" );
+  objectTree->Branch("ht_jetMap_dR15",&ht_jetMap_dR15, "ht_jetMap_dR15/F" );
+  objectTree->Branch("ht_jetMap_dR20",&ht_jetMap_dR20, "ht_jetMap_dR20/F" );
+  objectTree->Branch("ht_jetMap_dR25",&ht_jetMap_dR25, "ht_jetMap_dR25/F" );
 
   objectTree->Branch("L1_HTT280er",&L1_HTT280er, "L1_HTT280er/O" );
   objectTree->Branch("L1_ETT2000",&L1_ETT2000, "L1_ETT2000/O" );
@@ -563,6 +679,21 @@ void TriggerEffs::beginJob() {
   objectTree->Branch("passMuonTrigger",&passMuonTrigger, "passMuonTrigger/O" );
   objectTree->Branch("offlineMuon",&offlineMuon, "offlineMuon/O" );
   objectTree->Branch("finalMuon",&finalMuon, "finalMuon/O" );
+
+
+  jetVeto = false;
+  jetVeto_dR10 = false;
+  jetVeto_dR15 = false;
+  jetVeto_dR20 = false;
+  jetVeto_dR25 = false;
+
+  objectTree->Branch("jetVeto",&jetVeto, "jetVeto/O" );
+  objectTree->Branch("jetVeto_dR10",&jetVeto_dR10, "jetVeto_dR10/O" );
+  objectTree->Branch("jetVeto_dR15",&jetVeto_dR15, "jetVeto_dR15/O" );
+  objectTree->Branch("jetVeto_dR20",&jetVeto_dR20, "jetVeto_dR20/O" );
+  objectTree->Branch("jetVeto_dR25",&jetVeto_dR25, "jetVeto_dR25/O" );
+
+  objectTree->Branch("min_dR",&min_dR, "min_dR/F" );
 
   objectTree->Branch("observedPU", &observedPU, "observedPU/I");
   objectTree->Branch("truePU", &truePU, "truePU/I");
@@ -577,22 +708,6 @@ void TriggerEffs::beginJob() {
   objectTree->Branch("mu1s_pixelHits",&mu1s_pixelHits, "mu1s_pixelHits/I" );
   objectTree->Branch("mu1s_muonHits",&mu1s_muonHits, "mu1s_muonHits/I" );
   objectTree->Branch("mu1s_matchedStation",&mu1s_matchedStation, "mu1s_matchedStation/I" );
-
-  objectTree->Branch("mu1_pt",&mu1_pt, "mu1_pt/D" );
-  objectTree->Branch("mu1_eta",&mu1_eta, "mu1_eta/D" );
-  objectTree->Branch("mu1_chi2",&mu1_chi2, "mu1_chi2/D" );
-  objectTree->Branch("mu1_trackLayers",&mu1_trackLayers, "mu1_trackLayers/I" );
-  objectTree->Branch("mu1_pixelHits",&mu1_pixelHits, "mu1_pixelHits/I" );
-  objectTree->Branch("mu1_muonHits",&mu1_muonHits, "mu1_muonHits/I" );
-  objectTree->Branch("mu1_matchedStation",&mu1_matchedStation, "mu1_matchedStation/I" );
-
-  objectTree->Branch("mu2_pt",&mu2_pt, "mu2_pt/D" );
-  objectTree->Branch("mu2_eta",&mu2_eta, "mu2_eta/D" );
-  objectTree->Branch("mu2_chi2",&mu2_chi2, "mu2_chi2/D" );
-  objectTree->Branch("mu2_trackLayers",&mu2_trackLayers, "mu2_trackLayers/I" );
-  objectTree->Branch("mu2_pixelHits",&mu2_pixelHits, "mu2_pixelHits/I" );
-  objectTree->Branch("mu2_muonHits",&mu2_muonHits, "mu2_muonHits/I" );
-  objectTree->Branch("mu2_matchedStation",&mu2_matchedStation, "mu2_matchedStation/I" );
 
   objectTree->Branch("nPFMuons",&nPFMuons, "nPFMuons/I" );
   objectTree->Branch("muonsIsoCustom", &muonsIsoCustom);
