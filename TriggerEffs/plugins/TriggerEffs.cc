@@ -133,6 +133,8 @@ private:
   bool isMC;
   TTree* objectTree;
 
+  int nPFJets;
+
   int nPFJets_nocut;
   std::vector<float> Jet_pt_nocut;
   std::vector<float> Jet_eta_nocut;
