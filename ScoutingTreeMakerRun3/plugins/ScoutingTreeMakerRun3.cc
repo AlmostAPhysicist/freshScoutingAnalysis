@@ -235,6 +235,7 @@ private:
   std::vector<float>* scoutTrack_dxy;
   std::vector<float>* scoutTrack_dxyErr;
   std::vector<float>* scoutTrack_dxySig;
+  std::vector<float>* scoutTrack_dxySigned;
   std::vector<float>* scoutTrack_d3D;
   std::vector<float>* scoutTrack_d3DErr;
   std::vector<float>* scoutTrack_d3DSig;
@@ -261,6 +262,7 @@ private:
   std::vector<float>* vertTrack_dxy;
   std::vector<float>* vertTrack_dxyErr;
   std::vector<float>* vertTrack_dxySig;
+  std::vector<float>* vertTrack_dxySigned;
   std::vector<float>* vertTrack_d3D;
   std::vector<float>* vertTrack_d3DErr;
   std::vector<float>* vertTrack_d3DSig;
@@ -333,6 +335,15 @@ private:
   double weight;
   float beamspot_x;
   float beamspot_y;
+  float beamspot_z;
+  float beamspot_xErr;
+  float beamspot_yErr;
+  float beamspot_zErr;
+  float beamspot_xWidth;
+  float beamspot_yWidth;
+  float beamspot_widthErr;
+  int beamspot_type;
+  
   int eventId;
   int runNumber;
   int lumiBlock;
@@ -632,6 +643,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   scoutTrack_dxy->clear();
   scoutTrack_dxyErr->clear();
   scoutTrack_dxySig->clear();
+  scoutTrack_dxySigned->clear();
   scoutTrack_d3D->clear();
   scoutTrack_d3DErr->clear();
   scoutTrack_d3DSig->clear();
@@ -658,6 +670,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   vertTrack_dxy->clear();
   vertTrack_dxyErr->clear();
   vertTrack_dxySig->clear();
+  vertTrack_dxySigned->clear();
   vertTrack_d3D->clear();
   vertTrack_d3DErr->clear();
   vertTrack_d3DSig->clear();
@@ -810,7 +823,15 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   iEvent.getByToken(beamspot_token, beamspot);
   const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
   beamspot_x = beamspot->x0();
+  beamspot_xErr = beamspot->x0Error();
   beamspot_y = beamspot->y0();
+  beamspot_yErr = beamspot->y0Error();
+  beamspot_z = beamspot->z0();
+  beamspot_zErr = beamspot->z0Error();
+  beamspot_xWidth = beamspot->BeamWidthX();
+  beamspot_yWidth = beamspot->BeamWidthY();
+  beamspot_widthErr = beamspot->BeamWidthXError();
+  beamspot_type = beamspot->type();
   //std::cout<<"beamspot: "<<beamspot->position()<<std::endl;
   //Get the primary vertices
   edm::Handle<std::vector<reco::Vertex>> primaryVertices;
@@ -852,6 +873,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       scoutTrack_dxy->push_back(ttk_transverseDist.second.value());
       scoutTrack_dxyErr->push_back(ttk_transverseDist.second.error());
       scoutTrack_dxySig->push_back(ttk_transverseDist.second.significance());
+      GlobalVector dir(scoutingTrackIter->px(), scoutingTrackIter->py(), scoutingTrackIter->pz());
+      std::pair<bool, Measurement1D> ttk_transverseDistSigned = IPTools::signedTransverseImpactParameter(transientScoutTrack, dir, fake_bs_vtx);
+      scoutTrack_dxySigned->push_back(ttk_transverseDistSigned.second.value());
       scoutTrack_d3D->push_back(ttk_3DDist.second.value());
       scoutTrack_d3DErr->push_back(ttk_3DDist.second.error());
       scoutTrack_d3DSig->push_back(ttk_3DDist.second.significance());
@@ -1046,6 +1070,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 	vertTrack_dxy->push_back(ttransverseDist.second.value());
 	vertTrack_dxyErr->push_back(ttransverseDist.second.error());
 	vertTrack_dxySig->push_back(ttransverseDist.second.significance());
+	GlobalVector dir(vertTrack->px(), vertTrack->py(), vertTrack->pz());
+	std::pair<bool, Measurement1D> ttk_transverseDistSigned = IPTools::signedTransverseImpactParameter(transientTrack, dir, fake_bs_vtx);
+	vertTrack_dxySigned->push_back(ttk_transverseDistSigned.second.value());
 	vertTrack_d3D->push_back(t3DDist.second.value());
 	vertTrack_d3DErr->push_back(t3DDist.second.error());
 	vertTrack_d3DSig->push_back(t3DDist.second.significance());
@@ -1507,7 +1534,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     if(patJetVector.size()>3) phijet4 = patJetVector[3].phi();
   }
   
-  if(verticesH.isValid()){
+  if(verticesH.isValid() && (nVertices>0)){
     //Calculate the vertex distributions
     auto largest_dBV = findTwoLargestIndices(dBVs);
   
@@ -1534,7 +1561,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       ntk_2 = tks_2.size();
     }
   }
-
+  
   //L1 results
   l1Result_.clear();
   if (doTrigger) {
@@ -1669,6 +1696,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     scoutTrack_dxy = new std::vector<float>;
     scoutTrack_dxyErr = new std::vector<float>;
     scoutTrack_dxySig = new std::vector<float>;
+    scoutTrack_dxySigned = new std::vector<float>;
     scoutTrack_d3D = new std::vector<float>;
     scoutTrack_d3DErr = new std::vector<float>;
     scoutTrack_d3DSig = new std::vector<float>;
@@ -1695,6 +1723,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     vertTrack_dxy = new std::vector<float>;
     vertTrack_dxyErr = new std::vector<float>;
     vertTrack_dxySig = new std::vector<float>;
+    vertTrack_dxySigned = new std::vector<float>;
     vertTrack_d3D = new std::vector<float>;
     vertTrack_d3DErr = new std::vector<float>;
     vertTrack_d3DSig = new std::vector<float>;
@@ -1797,6 +1826,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("vertTrack_dxy",&vertTrack_dxy);
     objectTree->Branch("vertTrack_dxyErr",&vertTrack_dxyErr);
     objectTree->Branch("vertTrack_dxySig",&vertTrack_dxySig);
+    objectTree->Branch("vertTrack_dxySigned",&vertTrack_dxySigned);
     objectTree->Branch("vertTrack_d3D",&vertTrack_d3D);
     objectTree->Branch("vertTrack_d3DErr",&vertTrack_d3DErr);
     objectTree->Branch("vertTrack_d3DSig",&vertTrack_d3DSig);
@@ -1831,6 +1861,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutTrack_dxy",&scoutTrack_dxy);
     objectTree->Branch("scoutTrack_dxyErr",&scoutTrack_dxyErr);
     objectTree->Branch("scoutTrack_dxySig",&scoutTrack_dxySig);
+    objectTree->Branch("scoutTrack_dxySigned",&scoutTrack_dxySigned);
     objectTree->Branch("scoutTrack_d3D",&scoutTrack_d3D);
     objectTree->Branch("scoutTrack_d3DErr",&scoutTrack_d3DErr);
     objectTree->Branch("scoutTrack_d3DSig",&scoutTrack_d3DSig);
@@ -1898,6 +1929,14 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("nPV", &nPV, "nPV/I");
     objectTree->Branch("beamspot_x", &beamspot_x, "beamspot_x/F");
     objectTree->Branch("beamspot_y", &beamspot_y, "beamspot_y/F");
+    objectTree->Branch("beamspot_z", &beamspot_z, "beamspot_z/F");
+    objectTree->Branch("beamspot_xErr", &beamspot_xErr, "beamspot_xErr/F");
+    objectTree->Branch("beamspot_yErr", &beamspot_yErr, "beamspot_yErr/F");
+    objectTree->Branch("beamspot_zErr", &beamspot_zErr, "beamspot_zErr/F");
+    objectTree->Branch("beamspot_xWidth", &beamspot_xWidth, "beamspot_xWidth/F");
+    objectTree->Branch("beamspot_yWidth", &beamspot_yWidth, "beamspot_yWidth/F");
+    objectTree->Branch("beamspot_widthErr", &beamspot_widthErr, "beamspot_widthErr/F");
+    objectTree->Branch("beamspot_type", &beamspot_type, "beamspot_type/F");
     objectTree->Branch("eventId", &eventId, "eventId/I");
     objectTree->Branch("runNumber", &runNumber, "runNumber/I");
     objectTree->Branch("lumiBlock", &lumiBlock, "lumiBlock/I");
@@ -2070,6 +2109,7 @@ void ScoutingTreeMakerRun3::endJob() {
   delete scoutTrack_dxy;
   delete scoutTrack_dxyErr;
   delete scoutTrack_dxySig;
+  delete scoutTrack_dxySigned;
   delete scoutTrack_d3D;
   delete scoutTrack_d3DErr;
   delete scoutTrack_d3DSig;
@@ -2096,6 +2136,7 @@ void ScoutingTreeMakerRun3::endJob() {
   delete vertTrack_dxy;
   delete vertTrack_dxyErr;
   delete vertTrack_dxySig;
+  delete vertTrack_dxySigned;
   delete vertTrack_d3D;
   delete vertTrack_d3DErr;
   delete vertTrack_d3DSig;

@@ -48,6 +48,8 @@ process.load("FWCore.MessageService.MessageLogger_cfi")
 process.options = cms.untracked.PSet(
     wantSummary = cms.untracked.bool(True)
 )
+#process.options.numberOfThreads=cms.untracked.uint32(2)
+#process.options.numberOfStreams=cms.untracked.uint32(0)
 process.MessageLogger.cerr.FwkSummary.reportEvery = 100
 process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
@@ -63,6 +65,14 @@ process.source = cms.Source("PoolSource",
         #'/store/data/Run2024D/ScoutingPFRun3/HLTSCOUT/v1/000/380/945/00000/cdf45723-07c4-4b41-9595-f368f2929369.root'
         #PF monitor file
         #'/store/data/Run2024D/ScoutingPFMonitor/MINIAOD/PromptReco-v1/000/380/306/00000/70ec6086-72c5-4562-82a8-1f043e645d59.root'
+        #Run 384323 LS 8
+        #'/store/data/Run2024G/ScoutingPFRun3/HLTSCOUT/v1/000/384/323/00000/8504e079-a736-4dc9-b4c1-913502212b99.root'
+        #Run 385986 Era H
+        #'/store/data/Run2024H/ScoutingPFRun3/HLTSCOUT/v1/000/385/986/00000/e1aeb0a8-0ec4-4202-9705-873887cbf8ac.root'
+        #Run 381053 LS 74
+        #'/store/data/Run2024E/ScoutingPFRun3/HLTSCOUT/v1/000/381/053/00000/c0ba031e-c25b-426a-975b-aa058276df6c.root'
+        #Run 382255 LS 79
+        #'/store/data/Run2024F/ScoutingPFRun3/HLTSCOUT/v1/000/382/255/00000/ac42dc85-581c-438a-b536-3abbfe4eef90.root'
     )
 )
 
@@ -170,8 +180,8 @@ process.Vertexer = cms.EDProducer('Vertexer',
                                   isMC = cms.bool(options.isMC),
                                   seed_tracks_src = cms.InputTag('hltScoutingUnpackProducer', 'Track'),
                                   pt_min_cut = cms.double(1.0),
-                                  dxySig_min_cut = cms.double(2.0),
-                                  dxySig_max_cut = cms.double(4.0), #dxySig between 0.5 and 2.5 for a control region
+                                  dxySig_min_cut = cms.double(2.5),
+                                  dxySig_max_cut = cms.double(4.0), #dxySig between 2.5 and 4.0 for a control region
                                   npixelHits_min_cut = cms.int32(2),
                                   nstripHits_min_cut = cms.int32(1),
                                   ntrackerLayers_min_cut = cms.int32(5),
@@ -205,7 +215,7 @@ process.Vertexer = cms.EDProducer('Vertexer',
 
 process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       isMC = cms.bool(options.isMC),
-                                      required_ntk     = cms.int32(3),
+                                      required_ntk     = cms.int32(4),
                                       triggerresults   = cms.InputTag("TriggerResults", "", "HLT"),
                                       ReadPrescalesFromFile = cms.bool( False ),
                                       AlgInputTag       = cms.InputTag("gtStage2Digis"),
@@ -215,7 +225,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       isScouting = cms.bool(options.isScouting),
                                       doPhiCorrection = cms.bool( False ),
                                       doGenMatching = cms.bool( False ),
-                                      fillScoutTrack = cms.bool( False ),
+                                      fillScoutTrack = cms.bool( True ),
                                       luminosity = cms.double(options.lumi), #2024 luminosity (fb-1)
                                       crossSection = cms.double(options.crossSection), # cross section in fb
                                       PUCorrectionArray = cms.vdouble(*PUCorrectionData.flatten().tolist()),
