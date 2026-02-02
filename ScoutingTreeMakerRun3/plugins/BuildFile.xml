@@ -16,4 +16,5 @@
 <use name="SimGeneral/HepPDTRecord"/>
 <use name="SimTracker/TrackAssociation"/>
 <use name="TrackingTools/Records"/>
+<use name="correctionlib"/>
 <flags EDM_PLUGIN="1"/>

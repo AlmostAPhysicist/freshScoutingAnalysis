@@ -85,12 +85,12 @@ private:
   void endStream() override;
   void produce(edm::Event&, const edm::EventSetup&) override;
 
-  const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
+  //const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
   double luminosity;
   double crossSection;
-  const edm::EDGetTokenT<std::vector<PileupSummaryInfo>> truePileupToken;
+  //const edm::EDGetTokenT<std::vector<PileupSummaryInfo>> truePileupToken;
   int truePU;
-  std::vector<double> PUCorrectionArray;
+  //std::vector<double> PUCorrectionArray;
   bool isMC;
 
   TH1D* h_dxyErr_weighted_sum_barrel;
@@ -139,7 +139,8 @@ private:
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::Track>> seed_tracks_token_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> token_builder;
-
+  const edm::EDGetTokenT<std::map<std::string, float>> weightsToken_;
+  
   edm::EDPutTokenT<reco::VertexCollection> putToken_;
   edm::EDPutTokenT<edm::ValueMap<std::pair<float,float>>> vertexShiftZToken_;
   edm::EDPutTokenT<edm::ValueMap<std::pair<float,float>>> vertexShift3DToken_;
@@ -234,11 +235,11 @@ private:
 
 Vertexer::Vertexer(edm::ParameterSet const& params)
   :
-  GeneratorToken_(consumes(params.getParameter<edm::InputTag>("generatorName"))),
+  //GeneratorToken_(consumes(params.getParameter<edm::InputTag>("generatorName"))),
   luminosity(params.existsAs<double>("luminosity") ? params.getParameter<double>  ("luminosity") : 1.0),
   crossSection(params.existsAs<double>("crossSection") ? params.getParameter<double>  ("crossSection") : 1.0),
-  truePileupToken(consumes<std::vector<PileupSummaryInfo>>(params.getParameter<edm::InputTag>("truePileup"))),
-  PUCorrectionArray(params.getParameter<std::vector<double>>("PUCorrectionArray")),
+  //truePileupToken(consumes<std::vector<PileupSummaryInfo>>(params.getParameter<edm::InputTag>("truePileup"))),
+  //PUCorrectionArray(params.getParameter<std::vector<double>>("PUCorrectionArray")),
   isMC(params.existsAs<bool>("isMC") ?  params.getParameter<bool>  ("isMC") : false),
   pt_min_cut(params.getParameter<double>("pt_min_cut")),
   dxySig_min_cut(params.getParameter<double>("dxySig_min_cut")),
@@ -269,7 +270,7 @@ Vertexer::Vertexer(edm::ParameterSet const& params)
   beamspot_token(consumes<reco::BeamSpot>(params.getParameter<edm::InputTag>("beamspot_src"))),
   seed_tracks_token_(consumes(params.getParameter<edm::InputTag>("seed_tracks_src"))),
   token_builder(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
-
+  weightsToken_(consumes<std::map<std::string, float>>(edm::InputTag("triggerFilter", "weightMap"))),
   putToken_{produces()} {
   vertexShiftZToken_ = produces<edm::ValueMap<std::pair<float,float>>>("vtxZShift");
   vertexShift3DToken_ = produces<edm::ValueMap<std::pair<float,float>>>("vtx3DShift");
@@ -306,10 +307,11 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   const double bsz = beamspot->position().z();
   const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
 
-  double genWeight = 1.0;
+  //double genWeight = 1.0;
   double weight = 1.0;
   
   if(isMC){
+    /*
     edm::Handle<GenEventInfoProduct> generatorHandle;
     iEvent.getByToken(GeneratorToken_, generatorHandle);
     genWeight = generatorHandle->weight();
@@ -325,6 +327,10 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     }
     if(truePU>99) truePU = 99;
     weight *= PUCorrectionArray[truePU];
+    */
+    edm::Handle<std::map<std::string, float>> weightMap;
+    iEvent.getByToken(weightsToken_, weightMap);
+    weight = weightMap->at("PU_BCDEFGHI_nominal");
   }
   
   //Get the Transient Track Builder

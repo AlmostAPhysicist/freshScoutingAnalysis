@@ -47,6 +47,7 @@
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 #include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
+#include "correction.h"
 //
 // class declaration
 //
@@ -92,6 +93,8 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources> {
       TH1D* h_genWeights;
       TH1D* h_weights;
       TH1D* h_weightsSquared;
+      TH1D* h_weights_LUMCorrected;
+      TH1D* h_weightsSquared_LUMCorrected;
 
       TTree* tree;
       std::vector<float>* genJet_pt;
@@ -142,6 +145,7 @@ TriggerFilter::TriggerFilter(const edm::ParameterSet& iConfig):
   else{
     produces<std::vector<pat::Jet>>("patjets");
   }
+  if(isMC) produces<std::map<std::string, float>>("weightMap");
 }
 
 
@@ -165,7 +169,8 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   using namespace edm;
   using namespace std;
-
+  using correction::CorrectionSet;
+  
   bool passFilter = true;
   
   double genWeight;
@@ -177,14 +182,17 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   genJet_mass->clear();
   genJet_energy->clear();
   genJet_nConstituents->clear();
-  
+
+  std::string pileupCorrectionList[] = {"BCDEFGHI","C","D","E","F","G","H","I"};
+  std::string pileupVariationList[] = {"nominal","up","down"};
+  std::unique_ptr<std::map<std::string, float>> weightMap(new std::map<std::string, float>());
   if(isMC){
     edm::Handle<GenEventInfoProduct> generatorHandle;
     iEvent.getByToken(GeneratorToken_, generatorHandle);
     genWeight = generatorHandle->weight();
     h_genWeights->Fill("None",genWeight);
     theWeight = genWeight*luminosity*crossSection;
-
+    
     edm::Handle<std::vector<PileupSummaryInfo>> pileup;
     iEvent.getByToken(truePileupToken, pileup);
     std::vector<PileupSummaryInfo>::const_iterator pileupIter;
@@ -193,11 +201,25 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
 	truePU = pileupIter->getTrueNumInteractions();
       }
     }
+    for(auto fileString: pileupCorrectionList){
+      // Load the correction set from file
+      std::string fileName = "/cvmfs/cms-griddata.cern.ch/cat/metadata/LUM/Run3-24CDEReprocessingFGHIPrompt-Summer24-NanoAODv15/2025-12-02/puWeights_"+fileString+".json.gz";
+      auto cset = CorrectionSet::from_file(fileName);
+      auto corr = cset->at("Collisions24_"+fileString+"_goldenJSON");
+      for(auto variationString: pileupVariationList){
+	double w = theWeight * corr->evaluate({float(truePU), variationString});
+	(*weightMap)["PU_"+fileString+"_"+variationString] = w;
+      }
+    }
+	
     if(truePU>99) truePU = 99;
     theWeight *= PUCorrectionArray[truePU];
 
     h_weights->Fill("None",theWeight);
     h_weightsSquared->Fill("None",pow(theWeight,2));
+
+    h_weights_LUMCorrected->Fill("None",weightMap->at("PU_BCDEFGHI_nominal"));
+    h_weightsSquared_LUMCorrected->Fill("None",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
   }
   else{
     genWeight = 1;
@@ -241,6 +263,11 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     h_genWeights->Fill("Trigger",genWeight);
     h_weights->Fill("Trigger",theWeight);
     h_weightsSquared->Fill("Trigger",pow(theWeight,2));
+
+    if(isMC){
+      h_weights_LUMCorrected->Fill("Trigger",weightMap->at("PU_BCDEFGHI_nominal"));
+      h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+    }
   }
 
   //Get gen jets
@@ -338,6 +365,11 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     h_genWeights->Fill("nJets",genWeight);
     h_weights->Fill("nJets",theWeight);
     h_weightsSquared->Fill("nJets",pow(theWeight,2));
+
+    if(isMC){
+      h_weights_LUMCorrected->Fill("nJets",weightMap->at("PU_BCDEFGHI_nominal"));
+      h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+    }
   }
   if(isScouting){
     iEvent.put(std::move(pfJetVector),"pfjets");
@@ -345,6 +377,7 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   else{
     iEvent.put(std::move(patJetVector),"patjets");
   }
+  if(isMC) iEvent.put(std::move(weightMap),"weightMap");
   tree->Fill();
   return passFilter;
 }
@@ -363,11 +396,21 @@ TriggerFilter::beginJob()
   h_weights->GetXaxis()->SetBinLabel(1,"None");
   h_weights->GetXaxis()->SetBinLabel(2,"Trigger");
   h_weights->GetXaxis()->SetBinLabel(3,"nJets");
+
+  h_weights_LUMCorrected = fs->make<TH1D>("weightsSkimLUMCorrected",";Cut Applied; Sum of Weights",3,0,3);
+  h_weights_LUMCorrected->GetXaxis()->SetBinLabel(1,"None");
+  h_weights_LUMCorrected->GetXaxis()->SetBinLabel(2,"Trigger");
+  h_weights_LUMCorrected->GetXaxis()->SetBinLabel(3,"nJets");
   
   h_weightsSquared = fs->make<TH1D>("weightsSquaredSkim",";Cut Applied; Sum of Squared Weights",3,0,3);
   h_weightsSquared->GetXaxis()->SetBinLabel(1,"None");
   h_weightsSquared->GetXaxis()->SetBinLabel(2,"Trigger");
   h_weightsSquared->GetXaxis()->SetBinLabel(3,"nJets");
+
+  h_weightsSquared_LUMCorrected = fs->make<TH1D>("weightsSquaredSkimLUMCorrected",";Cut Applied; Sum of Squared Weights",3,0,3);
+  h_weightsSquared_LUMCorrected->GetXaxis()->SetBinLabel(1,"None");
+  h_weightsSquared_LUMCorrected->GetXaxis()->SetBinLabel(2,"Trigger");
+  h_weightsSquared_LUMCorrected->GetXaxis()->SetBinLabel(3,"nJets");
 
   TFile* vetoFile = TFile::Open("Summer24Prompt24_RunBCDEFGHI.root", "READ");
   jetVetoMap_ = (TH2F*)vetoFile->Get("jetvetomap");
@@ -403,8 +446,14 @@ TriggerFilter::endJob() {
   h_weights->Draw();
   h_weights->Write();
 
+  h_weights_LUMCorrected->Draw();
+  h_weights_LUMCorrected->Write();
+
   h_weightsSquared->Draw();
   h_weightsSquared->Write();
+
+  h_weightsSquared_LUMCorrected->Draw();
+  h_weightsSquared_LUMCorrected->Write();
 
   tree->GetDirectory()->cd();
   

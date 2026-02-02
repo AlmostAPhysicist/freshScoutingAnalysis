@@ -81,6 +81,7 @@
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h" 
 #include "TH2.h"
+#include "correction.h"
 //
 // class declaration
 //
@@ -174,7 +175,7 @@ private:
   std::unique_ptr<l1t::L1TGlobalUtil> l1GtUtils_;
   std::vector<std::string>     l1Seeds_;
   std::vector<bool>            l1Result_;
-
+  const edm::EDGetTokenT<std::map<std::string, float>> weightsToken_;
   TTree* tree;
   TTree* objectTree;
 
@@ -333,6 +334,30 @@ private:
   std::vector<float>* scoutVert_pMag;
   int scoutVert_nVertices;
   double weight;
+  double weight_BCDEFGHI_nominal;
+  double weight_BCDEFGHI_up;
+  double weight_BCDEFGHI_down;
+  double weight_C_nominal;
+  double weight_C_up;
+  double weight_C_down;
+  double weight_D_nominal;
+  double weight_D_up;
+  double weight_D_down;
+  double weight_E_nominal;
+  double weight_E_up;
+  double weight_E_down;
+  double weight_F_nominal;
+  double weight_F_up;
+  double weight_F_down;
+  double weight_G_nominal;
+  double weight_G_up;
+  double weight_G_down;
+  double weight_H_nominal;
+  double weight_H_up;
+  double weight_H_down;
+  double weight_I_nominal;
+  double weight_I_up;
+  double weight_I_down;
   float beamspot_x;
   float beamspot_y;
   float beamspot_z;
@@ -401,6 +426,8 @@ private:
   TH1D* h_genWeights = new TH1D("genWeights",";Cut Applied; Sum of Gen Weights",5,0,5);
   TH1D* h_weights = new TH1D("weights",";Cut Applied; Sum of Weights",5,0,5);
   TH1D* h_weightsSquared = new TH1D("weightsSquared",";Cut Applied; Sum of Squared Weights",5,0,5);
+  TH1D* h_weights_LUMCorrected = new TH1D("weightsLUMCorrected",";Cut Applied; Sum of Weights",5,0,5);
+  TH1D* h_weightsSquared_LUMCorrected = new TH1D("weightsSquaredLUMCorrected",";Cut Applied; Sum of Squared Weights",5,0,5);
     
   typedef std::set<reco::TrackRef> track_set;
   typedef std::vector<reco::TrackRef> track_vec;
@@ -600,7 +627,8 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   luminosity          (iConfig.existsAs<double>("luminosity")    ?    iConfig.getParameter<double>  ("luminosity") : 1.0),
   crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0),
   PUCorrectionArray(iConfig.getParameter<std::vector<double>>("PUCorrectionArray")),
-  isMC                    (iConfig.existsAs<bool>("isMC")               ?    iConfig.getParameter<bool>  ("isMC")            : false)
+  isMC                    (iConfig.existsAs<bool>("isMC")               ?    iConfig.getParameter<bool>  ("isMC")            : false),
+  weightsToken_(consumes<std::map<std::string, float>>(edm::InputTag("triggerFilter", "weightMap")))
 {
     usesResource("TFileService");
     if (doTrigger) {
@@ -633,6 +661,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   using namespace edm;
   using namespace std;
   using namespace reco;
+  using correction::CorrectionSet;
   
   scoutTrack_pt->clear();
   scoutTrack_eta->clear();
@@ -769,6 +798,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
   double genWeight = 1;
   double theWeight = 1;
+
+  edm::Handle<std::map<std::string, float>> weightMap;
+  iEvent.getByToken(weightsToken_, weightMap);
   
   if(isMC){
     edm::Handle<GenEventInfoProduct> generatorHandle;
@@ -785,11 +817,40 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 	truePU = pileupIter->getTrueNumInteractions();
       }
     }
+
+    weight_BCDEFGHI_nominal = weightMap->at("PU_BCDEFGHI_nominal");
+    weight_BCDEFGHI_up = weightMap->at("PU_BCDEFGHI_up");
+    weight_BCDEFGHI_down = weightMap->at("PU_BCDEFGHI_down");
+    weight_C_nominal = weightMap->at("PU_C_nominal");
+    weight_C_up = weightMap->at("PU_C_up");
+    weight_C_down = weightMap->at("PU_C_down");
+    weight_D_nominal = weightMap->at("PU_D_nominal");
+    weight_D_up = weightMap->at("PU_D_up");
+    weight_D_down = weightMap->at("PU_D_down");
+    weight_E_nominal = weightMap->at("PU_E_nominal");
+    weight_E_up = weightMap->at("PU_E_up");
+    weight_E_down = weightMap->at("PU_E_down");
+    weight_F_nominal = weightMap->at("PU_F_nominal");
+    weight_F_up = weightMap->at("PU_F_up");
+    weight_F_down = weightMap->at("PU_F_down");
+    weight_G_nominal = weightMap->at("PU_G_nominal");
+    weight_G_up = weightMap->at("PU_G_up");
+    weight_G_down = weightMap->at("PU_G_down");
+    weight_H_nominal = weightMap->at("PU_H_nominal");
+    weight_H_up = weightMap->at("PU_H_up");
+    weight_H_down = weightMap->at("PU_H_down");
+    weight_I_nominal = weightMap->at("PU_I_nominal");
+    weight_I_up = weightMap->at("PU_I_up");
+    weight_I_down = weightMap->at("PU_I_down");
+    
     if(truePU>99) truePU = 99;
     theWeight *= PUCorrectionArray[truePU];
     
     h_weights->Fill("None",theWeight);
     h_weightsSquared->Fill("None",pow(theWeight,2));
+
+    h_weights_LUMCorrected->Fill("None",weightMap->at("PU_BCDEFGHI_nominal"));
+    h_weightsSquared_LUMCorrected->Fill("None",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
   }
   else {
     genWeight = 1;
@@ -952,6 +1013,11 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_genWeights->Fill("nJets",genWeight);
     h_weights->Fill("nJets",theWeight);
     h_weightsSquared->Fill("nJets",pow(theWeight,2));
+
+    if(isMC){
+      h_weights_LUMCorrected->Fill("nJets",weightMap->at("PU_BCDEFGHI_nominal"));
+      h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+    }
   
     HT = 0;
     int t = 0;
@@ -1007,7 +1073,12 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_genWeights->Fill("nJets",genWeight);
     h_weights->Fill("nJets",theWeight);
     h_weightsSquared->Fill("nJets",pow(theWeight,2));
-  
+
+    if(isMC){
+      h_weights_LUMCorrected->Fill("nJets",weightMap->at("PU_BCDEFGHI_nominal"));
+      h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+    }
+    
     HT = 0;
     int t = 0;
     for (auto jet: patJetVector) {
@@ -1050,7 +1121,12 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_genWeights->Fill("nVertices",genWeight);
     h_weights->Fill("nVertices",theWeight);
     h_weightsSquared->Fill("nVertices",pow(theWeight,2));
-  
+
+    if(isMC){
+      h_weights_LUMCorrected->Fill("nVertices",weightMap->at("PU_BCDEFGHI_nominal"));
+      h_weightsSquared_LUMCorrected->Fill("nVertices",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+    }
+    
     h_scoutVert_nVertices->Fill(vertices_ntk.size());
     scoutVert_nVertices = vertices_ntk.size();
 
@@ -1550,6 +1626,11 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_genWeights->Fill("dBV",genWeight);
     h_weights->Fill("dBV",theWeight);
     h_weightsSquared->Fill("dBV",pow(theWeight,2));
+
+    if(isMC){
+      h_weights_LUMCorrected->Fill("dBV",weightMap->at("PU_BCDEFGHI_nominal"));
+      h_weightsSquared_LUMCorrected->Fill("dBV",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+    }
     
     //printf("First dBV = %f, second dBV = %f\n", dBV_1, dBV_2);
     if(nVertices>1){
@@ -1592,6 +1673,11 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       h_genWeights->Fill("Trigger",genWeight);
       h_weights->Fill("Trigger",theWeight);
       h_weightsSquared->Fill("Trigger",pow(theWeight,2));
+
+      if(isMC){
+	h_weights_LUMCorrected->Fill("Trigger",weightMap->at("PU_BCDEFGHI_nominal"));
+	h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+      }
     }
     else{
       edm::Handle<edm::TriggerResults> triggerBits;
@@ -1609,6 +1695,11 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       h_genWeights->Fill("Trigger",genWeight);
       h_weights->Fill("Trigger",theWeight);
       h_weightsSquared->Fill("Trigger",pow(theWeight,2));
+
+      if(isMC){
+	h_weights_LUMCorrected->Fill("Trigger",weightMap->at("PU_BCDEFGHI_nominal"));
+	h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+      }
     }
   }
 
@@ -1924,6 +2015,30 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutVert_cosT",&scoutVert_cosT);
     objectTree->Branch("scoutVert_pMag",&scoutVert_pMag);
     objectTree->Branch("weight", &weight, "weight/D");
+    objectTree->Branch("weight_BCDEFGHI_nominal", &weight_BCDEFGHI_nominal, "weight_BCDEFGHI_nominal/D");
+    objectTree->Branch("weight_BCDEFGHI_up", &weight_BCDEFGHI_up, "weight_BCDEFGHI_up/D");
+    objectTree->Branch("weight_BCDEFGHI_down", &weight_BCDEFGHI_down, "weight_BCDEFGHI_down/D");
+    objectTree->Branch("weight_C_nominal", &weight_C_nominal, "weight_C_nominal/D");
+    objectTree->Branch("weight_C_up", &weight_C_up, "weight_C_up/D");
+    objectTree->Branch("weight_C_down", &weight_C_down, "weight_C_down/D");
+    objectTree->Branch("weight_D_nominal", &weight_D_nominal, "weight_D_nominal/D");
+    objectTree->Branch("weight_D_up", &weight_D_up, "weight_D_up/D");
+    objectTree->Branch("weight_D_down", &weight_D_down, "weight_D_down/D");
+    objectTree->Branch("weight_E_nominal", &weight_E_nominal, "weight_E_nominal/D");
+    objectTree->Branch("weight_E_up", &weight_E_up, "weight_E_up/D");
+    objectTree->Branch("weight_E_down", &weight_E_down, "weight_E_down/D");
+    objectTree->Branch("weight_F_nominal", &weight_F_nominal, "weight_F_nominal/D");
+    objectTree->Branch("weight_F_up", &weight_F_up, "weight_F_up/D");
+    objectTree->Branch("weight_F_down", &weight_F_down, "weight_F_down/D");
+    objectTree->Branch("weight_G_nominal", &weight_G_nominal, "weight_G_nominal/D");
+    objectTree->Branch("weight_G_up", &weight_G_up, "weight_G_up/D");
+    objectTree->Branch("weight_G_down", &weight_G_down, "weight_G_down/D");
+    objectTree->Branch("weight_H_nominal", &weight_H_nominal, "weight_H_nominal/D");
+    objectTree->Branch("weight_H_up", &weight_H_up, "weight_H_up/D");
+    objectTree->Branch("weight_H_down", &weight_H_down, "weight_H_down/D");
+    objectTree->Branch("weight_I_nominal", &weight_I_nominal, "weight_I_nominal/D");
+    objectTree->Branch("weight_I_up", &weight_I_up, "weight_I_up/D");
+    objectTree->Branch("weight_I_down", &weight_I_down, "weight_I_down/D");
     objectTree->Branch("observedPU", &observedPU, "observedPU/I");
     objectTree->Branch("truePU", &truePU, "truePU/I");
     objectTree->Branch("nPV", &nPV, "nPV/I");
@@ -1975,11 +2090,21 @@ void ScoutingTreeMakerRun3::beginJob() {
     h_weights->GetXaxis()->SetBinLabel(3,"nVertices");
     h_weights->GetXaxis()->SetBinLabel(4,"dBV");
     h_weights->GetXaxis()->SetBinLabel(5,"Trigger");
+    h_weights_LUMCorrected->GetXaxis()->SetBinLabel(1,"None");
+    h_weights_LUMCorrected->GetXaxis()->SetBinLabel(2,"nJets");
+    h_weights_LUMCorrected->GetXaxis()->SetBinLabel(3,"nVertices");
+    h_weights_LUMCorrected->GetXaxis()->SetBinLabel(4,"dBV");
+    h_weights_LUMCorrected->GetXaxis()->SetBinLabel(5,"Trigger");
     h_weightsSquared->GetXaxis()->SetBinLabel(1,"None");
     h_weightsSquared->GetXaxis()->SetBinLabel(2,"nJets");
     h_weightsSquared->GetXaxis()->SetBinLabel(3,"nVertices");
     h_weightsSquared->GetXaxis()->SetBinLabel(4,"dBV");
     h_weightsSquared->GetXaxis()->SetBinLabel(5,"Trigger");
+    h_weightsSquared_LUMCorrected->GetXaxis()->SetBinLabel(1,"None");
+    h_weightsSquared_LUMCorrected->GetXaxis()->SetBinLabel(2,"nJets");
+    h_weightsSquared_LUMCorrected->GetXaxis()->SetBinLabel(3,"nVertices");
+    h_weightsSquared_LUMCorrected->GetXaxis()->SetBinLabel(4,"dBV");
+    h_weightsSquared_LUMCorrected->GetXaxis()->SetBinLabel(5,"Trigger");
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
@@ -2026,9 +2151,15 @@ void ScoutingTreeMakerRun3::endJob() {
 
   h_weights->Draw();
   h_weights->Write();
+
+  h_weights_LUMCorrected->Draw();
+  h_weights_LUMCorrected->Write();
   
   h_weightsSquared->Draw();
   h_weightsSquared->Write();
+
+  h_weightsSquared_LUMCorrected->Draw();
+  h_weightsSquared_LUMCorrected->Write();
   
   removeFlows(h_genVert_phi);
   h_genVert_phi->Draw();
