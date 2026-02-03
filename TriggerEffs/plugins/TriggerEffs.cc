@@ -110,6 +110,7 @@ private:
 
   // ----------member data ---------------------------
   const edm::EDGetTokenT<std::vector<Run3ScoutingPFJet> >  pfjetsToken;
+  const edm::EDGetTokenT<std::vector<reco::PFJet> >  pfjetsTokenCorrected;
   const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
   const edm::EDGetTokenT<edm::TriggerResults> triggerResultsToken;
 
@@ -129,55 +130,39 @@ private:
   std::unique_ptr<l1t::L1TGlobalUtil> l1GtUtils_;
   std::vector<std::string>     l1Seeds_;
 
-  
+  bool hasJEC;
   bool isMC;
   TTree* objectTree;
 
   int nPFJets;
 
-  int nPFJets_nocut;
-  std::vector<float> Jet_pt_nocut;
-  std::vector<float> Jet_eta_nocut;
-  std::vector<float> Jet_phi_nocut;
-
-  int nPFJets_ht;
-  std::vector<float> Jet_pt_ht;
-  std::vector<float> Jet_eta_ht;
-  std::vector<float> Jet_phi_ht;
-
   int nPFJets_jetVeto;
-  std::vector<float> Jet_pt_jetVeto;
-  std::vector<float> Jet_eta_jetVeto;
-  std::vector<float> Jet_phi_jetVeto;
-
-  int nPFJets_jetVeto_dR10;
-  std::vector<float> Jet_pt_jetVeto_dR10;
-  std::vector<float> Jet_eta_jetVeto_dR10;
-  std::vector<float> Jet_phi_jetVeto_dR10;
-
-  int nPFJets_jetVeto_dR15;
-  std::vector<float> Jet_pt_jetVeto_dR15;
-  std::vector<float> Jet_eta_jetVeto_dR15;
-  std::vector<float> Jet_phi_jetVeto_dR15;
+  float Jet_pt_jetVeto;
+  float Jet_eta_jetVeto;
+  float Jet_phi_jetVeto;
 
   int nPFJets_jetVeto_dR20;
-  std::vector<float> Jet_pt_jetVeto_dR20;
-  std::vector<float> Jet_eta_jetVeto_dR20;
-  std::vector<float> Jet_phi_jetVeto_dR20;
+  float Jet_pt_jetVeto_dR20;
+  float Jet_eta_jetVeto_dR20;
+  float Jet_phi_jetVeto_dR20;
 
-  int nPFJets_jetVeto_dR25;
-  std::vector<float> Jet_pt_jetVeto_dR25;
-  std::vector<float> Jet_eta_jetVeto_dR25;
-  std::vector<float> Jet_phi_jetVeto_dR25;
 
   float ht;
   float ht_raw;
   float ht_jetMap;
-  float ht_jetMap_dR10;
-  float ht_jetMap_dR15;
   float ht_jetMap_dR20;
-  float ht_jetMap_dR25;
 
+  int nPFJets_corrected;
+  float ht_corrected;
+  float ht_corrected_jetVeto;
+  float ht_corrected_jetVeto_dR20;
+
+  float Jet1_pt;
+  float Jet1_eta;
+  float Jet1_phi;
+  float Jet1_pt_corrected;
+  float Jet1_eta_corrected;
+  float Jet1_phi_corrected;
 
   bool L1_HTT280er;
   bool L1_ETT2000;
@@ -252,10 +237,7 @@ private:
   float dR_jet_mu;
 
   bool jetVeto;
-  bool jetVeto_dR10;
-  bool jetVeto_dR15;
   bool jetVeto_dR20;
-  bool jetVeto_dR25;
 
   std::vector<float> dRs;
   float min_dR;
@@ -339,6 +321,7 @@ bool matchesPF(int ID, double tolerance, Run3ScoutingMuon const& muonTrack,  edm
 //
 TriggerEffs::TriggerEffs(const edm::ParameterSet& iConfig):
     pfjetsToken(consumes<std::vector<Run3ScoutingPFJet> >(iConfig.getParameter<edm::InputTag>("pfjets"))),
+    pfjetsTokenCorrected(consumes<std::vector<reco::PFJet> >(iConfig.getParameter<edm::InputTag>("pfjetsCorrected"))),
     GeneratorToken_(consumes(iConfig.getParameter<edm::InputTag>("generatorName"))),
     triggerResultsToken(consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("triggerresults"))),
     luminosity(iConfig.existsAs<double>("luminosity") ? iConfig.getParameter<double>  ("luminosity") : 1.0),
@@ -347,6 +330,7 @@ TriggerEffs::TriggerEffs(const edm::ParameterSet& iConfig):
     extInputTag_(iConfig.getParameter<edm::InputTag>("l1tExtBlkInputTag")), 
     algToken_(consumes<BXVector<GlobalAlgBlk>>(iConfig.getParameter<edm::InputTag>("AlgInputTag"))),
     l1Seeds_(iConfig.getParameter<std::vector<std::string>>("l1Seeds")),
+    hasJEC(iConfig.existsAs<bool>("hasJEC") ?  iConfig.getParameter<bool>  ("hasJEC") : false),
     isMC(iConfig.existsAs<bool>("isMC") ?  iConfig.getParameter<bool>  ("isMC") : false),
     truePileupToken(consumes<std::vector<PileupSummaryInfo>>(iConfig.getParameter<edm::InputTag>("truePileup"))),
     muonsToken(consumes<std::vector<Run3ScoutingMuon>>(iConfig.getParameter<edm::InputTag>("scoutingMuon"))),
@@ -431,6 +415,9 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
   ht_raw = 0;
   ht = 0;
 
+  Jet1_pt = 0;
+  Jet1_eta = 0;
+  Jet1_phi = 0;
   //HT calculated as in L1
   if(pfjetsH.isValid()){
     for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
@@ -438,6 +425,12 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
       if(jets_iter->pt() > 30 && abs(jets_iter->eta()) < 2.4){ //same requirements as L1_HTTer
         pfJetVector.push_back(*jets_iter);
         ht = ht + jets_iter->pt();
+
+        if(jets_iter->pt() > Jet1_pt){
+          Jet1_pt = jets_iter->pt();
+          Jet1_eta = jets_iter->eta();
+          Jet1_phi = jets_iter->phi();
+        }
       }
     }
     nPFJets = pfJetVector.size();
@@ -551,16 +544,10 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
   finalMuon = passMuonTrigger && offlineMuon;
 
   ht_jetMap = 0;
-  ht_jetMap_dR10 = 0;
-  ht_jetMap_dR15 = 0;
   ht_jetMap_dR20 = 0;
-  ht_jetMap_dR25 = 0;
 
   jetVeto = false;
-  jetVeto_dR10 = false;
-  jetVeto_dR15 = false;
   jetVeto_dR20 = false;
-  jetVeto_dR25 = false;
 
   dRs.clear();
 
@@ -594,50 +581,108 @@ void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
           if((maskBit==0) && Jet_passJetIdTightLepVeto && ((Jet_chEmEF+Jet_neEmEF)<0.9) ){
             ht_jetMap = ht_jetMap + Jet_pt;
             
-            bool dR10 = true;
-            bool dR15 = true;
             bool dR20 = true;
-            bool dR25 = true;
             
             for (auto muon : selectedMuons) {
                 dEta_jet_mu = Jet_eta - muon->eta();
                 dPhi_jet_mu = deltaPhi(Jet_phi, muon->phi());
                 dR_jet_mu = sqrt(pow(dEta_jet_mu, 2) + pow(dPhi_jet_mu, 2));
                 dRs.push_back(dR_jet_mu);
-                if(dR_jet_mu < 0.10){
-                  dR10 = false;
-                  jetVeto_dR10 = true;
-                } 
-                if(dR_jet_mu < 0.15){
-                  dR15 = false;
-                  jetVeto_dR15 = true;
-                } 
                 if(dR_jet_mu < 0.20){
                   dR20 = false;
                   jetVeto_dR20 = true;
                 } 
-                if(dR_jet_mu < 0.25){
-                  dR25 = false;
-                  jetVeto_dR25 = true;
-                } 
             }  
-
-            if(dR10) ht_jetMap_dR10 = ht_jetMap_dR10 + Jet_pt;
-            if(dR15) ht_jetMap_dR15 = ht_jetMap_dR15 + Jet_pt;
             if(dR20) ht_jetMap_dR20 = ht_jetMap_dR20 + Jet_pt;
-            if(dR25) ht_jetMap_dR25 = ht_jetMap_dR25 + Jet_pt;
             
           }
           else {
             jetVeto = true;
-            jetVeto_dR10 = true;
-            jetVeto_dR15 = true;
             jetVeto_dR20 = true;
-            jetVeto_dR25 = true;
 
           }
         }
       }
+    }
+  }
+
+  //do the same for the corrected jets
+  nPFJets_corrected = -1;
+  ht_corrected = 0;
+  ht_corrected_jetVeto = 0;
+  ht_corrected_jetVeto_dR20 = 0;
+
+  Jet1_pt_corrected = 0;
+  Jet1_eta_corrected = 0;
+  Jet1_phi_corrected = 0;
+
+  if(hasJEC){
+    Handle<vector<reco::PFJet> > pfjetsCorrectedH;
+    iEvent.getByToken(pfjetsTokenCorrected, pfjetsCorrectedH);
+    std::vector<reco::PFJet> pfJetVectorCorrected;
+
+    if(pfjetsCorrectedH.isValid()){
+    for (auto jets_iter = pfjetsCorrectedH->begin(); jets_iter != pfjetsCorrectedH->end(); ++jets_iter) {
+      if(jets_iter->pt() > 30 && abs(jets_iter->eta()) < 2.4){ //same requirements as L1_HTTer
+        pfJetVectorCorrected.push_back(*jets_iter);
+        ht_corrected = ht_corrected + jets_iter->pt();
+
+        if(jets_iter->pt() > Jet1_pt_corrected){
+          Jet1_pt_corrected = jets_iter->pt();
+          Jet1_eta_corrected = jets_iter->eta();
+          Jet1_phi_corrected = jets_iter->phi();
+        }
+      
+
+	      binX = jetVetoMap_->GetXaxis()->FindBin(Jet_eta);
+        binY = jetVetoMap_->GetYaxis()->FindBin(jets_iter->phi());
+        maskBit = jetVetoMap_->GetBinContent(binX, binY);
+
+        energy = TMath::Sqrt(pow(TMath::CosH(jets_iter->eta())*jets_iter->pt(),2)+pow(jets_iter->mass(),2));
+        if(energy > 0){
+          Jet_chHEF = jets_iter->chargedHadronEnergy()/energy;
+          Jet_neHEF = jets_iter->neutralHadronEnergy()/energy;
+          Jet_muEF = jets_iter->muonEnergy()/energy;
+          Jet_chEmEF = jets_iter->electronEnergy()/energy;
+          Jet_neEmEF = (jets_iter->photonEnergy()+jets_iter->HFEMEnergy())/energy;
+          Jet_chMultiplicity = jets_iter->chargedHadronMultiplicity()+jets_iter->electronMultiplicity()+jets_iter->muonMultiplicity();
+          Jet_neMultiplicity = jets_iter->neutralHadronMultiplicity()+jets_iter->photonMultiplicity()+jets_iter->HFHadronMultiplicity()+jets_iter->HFEMMultiplicity();
+          Jet_passJetIdTight = false;
+
+          Jet_passJetIdTight = (Jet_neHEF < 0.99) && (Jet_neEmEF < 0.9) && (Jet_chMultiplicity+Jet_neMultiplicity > 1) && (Jet_chHEF > 0.01) && (Jet_chMultiplicity > 0);
+
+          Jet_passJetIdTightLepVeto = false;
+          Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF < 0.8) && (Jet_chEmEF < 0.8);
+          
+          if((maskBit==0) && Jet_passJetIdTightLepVeto && ((Jet_chEmEF+Jet_neEmEF)<0.9) ){
+            ht_corrected_jetVeto = ht_corrected_jetVeto + jets_iter->pt();
+            
+            bool dR20 = true;
+            
+            for (auto muon : selectedMuons) {
+                dEta_jet_mu = jets_iter->eta() - muon->eta();
+                dPhi_jet_mu = deltaPhi(Jet_phi, muon->phi());
+                dR_jet_mu = sqrt(pow(dEta_jet_mu, 2) + pow(dPhi_jet_mu, 2));
+                dRs.push_back(dR_jet_mu);
+                if(dR_jet_mu < 0.20){
+                  dR20 = false;
+                  jetVeto_dR20 = true;
+                } 
+            }  
+            if(dR20) ht_corrected_jetVeto_dR20 = ht_corrected_jetVeto_dR20 + jets_iter->pt();
+            
+          }
+          else {
+            jetVeto = true;
+            jetVeto_dR20 = true;
+
+          }
+        }
+      }
+
+
+    }
+    nPFJets_corrected = pfJetVectorCorrected.size();
     }
   }
 
@@ -667,10 +712,22 @@ void TriggerEffs::beginJob() {
   objectTree->Branch("ht",&ht, "ht/F" );
   objectTree->Branch("ht_raw",&ht_raw, "ht_raw/F" );
   objectTree->Branch("ht_jetMap",&ht_jetMap, "ht_jetMap/F" );
-  objectTree->Branch("ht_jetMap_dR10",&ht_jetMap_dR10, "ht_jetMap_dR10/F" );
-  objectTree->Branch("ht_jetMap_dR15",&ht_jetMap_dR15, "ht_jetMap_dR15/F" );
   objectTree->Branch("ht_jetMap_dR20",&ht_jetMap_dR20, "ht_jetMap_dR20/F" );
-  objectTree->Branch("ht_jetMap_dR25",&ht_jetMap_dR25, "ht_jetMap_dR25/F" );
+
+  objectTree->Branch("ht_corrected",&ht_corrected, "ht_corrected/F" );
+  objectTree->Branch("ht_corrected_jetVeto",&ht_corrected_jetVeto, "ht_corrected_jetVeto/F" );
+  objectTree->Branch("ht_corrected_jetVeto_dR20",&ht_corrected_jetVeto_dR20, "ht_corrected_jetVeto_dR20/F" );
+
+  objectTree->Branch("nPFJets", &nPFJets, "nPFJets/I");
+  objectTree->Branch("nPFJets_corrected", &nPFJets_corrected, "nPFJets_corrected/I");
+
+  objectTree->Branch("Jet1_pt",&Jet1_pt, "Jet1_pt/F" );
+  objectTree->Branch("Jet1_eta",&Jet1_eta, "Jet1_eta/F" );
+  objectTree->Branch("Jet1_phi",&Jet1_phi, "Jet1_phi/F" );
+
+  objectTree->Branch("Jet1_pt_corrected",&Jet1_pt_corrected, "Jet1_pt_corrected/F" );
+  objectTree->Branch("Jet1_eta_corrected",&Jet1_eta_corrected, "Jet1_eta_corrected/F" );
+  objectTree->Branch("Jet1_phi_corrected",&Jet1_phi_corrected, "Jet1_phi_corrected/F" );
 
   objectTree->Branch("L1_HTT280er",&L1_HTT280er, "L1_HTT280er/O" );
   objectTree->Branch("L1_ETT2000",&L1_ETT2000, "L1_ETT2000/O" );
@@ -682,18 +739,8 @@ void TriggerEffs::beginJob() {
   objectTree->Branch("offlineMuon",&offlineMuon, "offlineMuon/O" );
   objectTree->Branch("finalMuon",&finalMuon, "finalMuon/O" );
 
-
-  jetVeto = false;
-  jetVeto_dR10 = false;
-  jetVeto_dR15 = false;
-  jetVeto_dR20 = false;
-  jetVeto_dR25 = false;
-
   objectTree->Branch("jetVeto",&jetVeto, "jetVeto/O" );
-  objectTree->Branch("jetVeto_dR10",&jetVeto_dR10, "jetVeto_dR10/O" );
-  objectTree->Branch("jetVeto_dR15",&jetVeto_dR15, "jetVeto_dR15/O" );
   objectTree->Branch("jetVeto_dR20",&jetVeto_dR20, "jetVeto_dR20/O" );
-  objectTree->Branch("jetVeto_dR25",&jetVeto_dR25, "jetVeto_dR25/O" );
 
   objectTree->Branch("min_dR",&min_dR, "min_dR/F" );
 
