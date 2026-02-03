@@ -118,7 +118,7 @@ private:
   //const edm::EDGetTokenT<std::vector<Run3ScoutingVertex> >    verticesToken;
   const edm::EDGetTokenT<double>                          rhoToken;
   const edm::EDGetTokenT<std::vector<Run3ScoutingPhoton> >  photonsToken;
-  const edm::EDGetTokenT<std::vector<Run3ScoutingPFJet> >  pfjetsToken;
+  const edm::EDGetTokenT<std::vector<reco::PFJet> >  pfjetsToken;
   const edm::EDGetTokenT<std::vector<pat::Jet> >  patjetsToken;
   //const edm::EDGetTokenT<std::vector<Run3ScoutingTrack> >  tracksToken;
   const edm::EDGetTokenT<std::vector<reco::Track> >  tracksToken;
@@ -603,7 +603,7 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   //verticesToken            (consumes<std::vector<Run3ScoutingVertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),
   rhoToken                 (consumes<double>                                 (iConfig.getParameter<edm::InputTag>("rho"))), 
   photonsToken             (consumes<std::vector<Run3ScoutingPhoton> >         (iConfig.getParameter<edm::InputTag>("photons"))),
-  pfjetsToken              (consumes<std::vector<Run3ScoutingPFJet> >            (iConfig.getParameter<edm::InputTag>("pfjets"))),
+  pfjetsToken              (consumes<std::vector<reco::PFJet> >            (iConfig.getParameter<edm::InputTag>("pfjets"))),
   patjetsToken              (consumes<std::vector<pat::Jet> >            (iConfig.getParameter<edm::InputTag>("patjets"))),
   //tracksToken              (consumes<std::vector<Run3ScoutingTrack> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
   tracksToken              (consumes<std::vector<reco::Track> >            (iConfig.getParameter<edm::InputTag>("tracks"))),
@@ -1001,9 +1001,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   }
   
   //Get the jets
-  Handle<vector<Run3ScoutingPFJet> > pfjetsH;
+  Handle<vector<reco::PFJet> > pfjetsH;
   iEvent.getByToken(pfjetsToken, pfjetsH);
-  std::vector<Run3ScoutingPFJet> pfJetVector;
+  std::vector<reco::PFJet> pfJetVector;
   
   //Require 4 PF Jets
   if(pfjetsH.isValid() && isScouting){
@@ -1026,8 +1026,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       float Jet_eta = jet.eta();
       jet_eta->push_back(Jet_eta);
       jet_phi->push_back(jet.phi());
-      jet_mass->push_back(jet.m());
-      float energy = TMath::Sqrt(pow(TMath::CosH(jet.eta())*jet.pt(),2)+pow(jet.m(),2));
+      jet_mass->push_back(jet.mass());
+      float energy = TMath::Sqrt(pow(TMath::CosH(jet.eta())*jet.pt(),2)+pow(jet.mass(),2));
       jet_energy->push_back(energy);
       float Jet_chHEF = jet.chargedHadronEnergy()/energy;
       jet_chHEF->push_back(Jet_chHEF);
@@ -1039,7 +1039,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       jet_neEmEF->push_back(Jet_neEmEF);
       jet_hfHEF->push_back(jet.HFHadronEnergy()/energy);
       jet_hfEmEF->push_back(jet.HFEMEnergy()/energy);
-      jet_hoEF->push_back(jet.HOEnergy()/energy);
+      jet_hoEF->push_back(jet.hoEnergy()/energy);
       int Jet_chMultiplicity = jet.chargedHadronMultiplicity()+jet.electronMultiplicity()+jet.muonMultiplicity();
       jet_chMultiplicity->push_back(Jet_chMultiplicity);
       int Jet_neMultiplicity = jet.neutralHadronMultiplicity()+jet.photonMultiplicity()+jet.HFHadronMultiplicity()+jet.HFEMMultiplicity();

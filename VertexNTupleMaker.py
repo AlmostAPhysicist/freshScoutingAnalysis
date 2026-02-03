@@ -43,6 +43,13 @@ options.register('PUFile',
                  "Name of pileup correction file to use"
     )
 
+options.register('doJEC',
+                 True,
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.bool,
+                 "If HLT jet corrections are applied"
+)
+
 options.parseArguments()
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.options = cms.untracked.PSet(
@@ -87,17 +94,39 @@ if(options.isMC):
     process.GlobalTag = GlobalTag(process.GlobalTag, '140X_mcRun3_2024_realistic_v26', '')  
     truePileupTag = cms.InputTag("slimmedAddPileupInfo")
 else:
-    process.GlobalTag = GlobalTag(process.GlobalTag, '140X_dataRun3_Prompt_v4', '')
+    process.GlobalTag = GlobalTag(process.GlobalTag, '140X_dataRun3_HLT_v3', '')
     truePileupTag = cms.InputTag("")
     
+# update JEC
+if(options.isMC):
+    process.GlobalTag.toGet = cms.VPSet(
+    cms.PSet( # hlt AK4PFHLT latest
+        record = cms.string("JetCorrectionsRecord"),
+        tag = cms.string("JetCorrectorParametersCollection_Run3Winter24Digi_AK4PFHLT"),
+        label = cms.untracked.string("AK4PFHLT"),
+        connect = cms.string("frontier://FrontierProd/CMS_CONDITIONS")
+    )
+    )
+else:
+    process.GlobalTag.toGet = cms.VPSet(
+    cms.PSet( # hlt AK4PFHLT latest
+        record = cms.string("JetCorrectionsRecord"),
+        tag = cms.string("JetCorrectorParametersCollection_AK4PFHLT_hlt_v1"),
+        label = cms.untracked.string("AK4PFHLT"),
+        connect = cms.string("frontier://FrontierProd/CMS_CONDITIONS")
+    )
+    )
+
 process.load("RecoVertex.BeamSpotProducer.BeamSpot_cfi")
 process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
 
 process.load("EventFilter.L1TRawToDigi.gtStage2Digis_cfi")
 process.gtStage2Digis.InputLabel = cms.InputTag( "hltFEDSelectorL1" )
 
+
+
 process.TFileService = cms.Service("TFileService",
-                                   fileName = cms.string("tree.root")
+                                   fileName = cms.string("tree_test.root")
                                    )
 
 if(options.isScouting):
@@ -109,8 +138,12 @@ if(options.isScouting):
     lostTrackTag = cms.InputTag("")
 
     #skim
-    pfjetsTag = cms.InputTag("hltScoutingPFPacker")
-    patjetsTag = cms.InputTag("")
+    if(options.doJEC):
+        pfjetsTag = cms.InputTag("scoutingPFJetCorrected")
+        patjetsTag = cms.InputTag("")
+    else:
+        pfjetsTag = cms.InputTag("scoutingToRecoJets")
+        patjetsTag = cms.InputTag("")
 
     #tree maker
     skimPFJetsTag = cms.InputTag("triggerFilter","pfjets")
@@ -137,21 +170,60 @@ if(options.hasReco):
     recoTrackTag = cms.InputTag("displacedTracks")
 else:
     recoTrackTag = cms.InputTag("hltScoutingUnpackProducer","Track")
-    
-# Input tags to the EDProducer
-process.hltScoutingUnpackProducer = cms.EDProducer('HLTScoutingUnpackProducer',
-  scoutingTrack = scoutingTrackTag,
-  scoutingPrimaryVertex = scoutingPVTag,
-  scoutingParticle = scoutingPFTag,
-  pfCand = pfCandTag,
-  lostTrack = lostTrackTag,
-  isScouting = cms.bool(options.isScouting),
-  producePFCHSCandidate = cms.bool(False),
-  mightGet = cms.optional.untracked.vstring
-)
 
 #The L1 seeds used for JetHT
 L1Info = ["L1_HTT200er", "L1_HTT255er", "L1_HTT280er", "L1_HTT320er", "L1_HTT360er", "L1_HTT400er", "L1_HTT450er", "L1_ETT2000", "L1_SingleJet180", "L1_SingleJet200", "L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5", "L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5", "L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5"]
+
+    
+# Input tags to the EDProducers
+
+#create reco::PFJet
+process.scoutingToRecoJets = cms.EDProducer('Run3ScoutingPFJetToRecoPFJetProducer',
+                                     scoutingPFJet = cms.InputTag("hltScoutingPFPacker")
+                                     )
+
+#Jet corrector
+process.hltAK4PFFastJetCorrector = cms.EDProducer("L1FastjetCorrectorProducer",
+    algorithm = cms.string("AK4PFHLT"),
+    level = cms.string("L1FastJet"),
+    srcRho = cms.InputTag("hltScoutingPFPacker", "rho")
+)
+
+process.hltAK4PFRelativeCorrector = cms.EDProducer( "LXXXCorrectorProducer",
+    algorithm = cms.string( "AK4PFHLT" ),
+    level = cms.string( "L2Relative" )
+)
+
+process.hltAK4PFAbsoluteCorrector = cms.EDProducer( "LXXXCorrectorProducer",
+    algorithm = cms.string( "AK4PFHLT" ),
+    level = cms.string( "L3Absolute" )
+)
+
+process.hltAK4PFResidualCorrector = cms.EDProducer( "LXXXCorrectorProducer",
+    algorithm = cms.string( "AK4PFHLT" ),
+    level = cms.string( "L2L3Residual" )
+)
+
+process.hltAK4PFCorrector = cms.EDProducer("ChainedJetCorrectorProducer",
+    correctors = cms.VInputTag(["hltAK4PFFastJetCorrector", "hltAK4PFRelativeCorrector", "hltAK4PFAbsoluteCorrector", "hltAK4PFResidualCorrector" ])
+)
+process.scoutingPFJetCorrected = cms.EDProducer("CorrectedPFJetProducer",
+    correctors = cms.VInputTag(["hltAK4PFCorrector"]),
+    src = cms.InputTag("scoutingToRecoJets"),
+)
+
+
+process.hltScoutingUnpackProducer = cms.EDProducer('HLTScoutingUnpackProducer',
+                                                   scoutingTrack = scoutingTrackTag,
+                                                   scoutingPrimaryVertex = scoutingPVTag,
+                                                   scoutingParticle = scoutingPFTag,
+                                                   pfCand = pfCandTag,
+                                                   lostTrack = lostTrackTag,
+                                                   isScouting = cms.bool(options.isScouting),
+                                                   producePFCHSCandidate = cms.bool(False),
+                                                   mightGet = cms.optional.untracked.vstring
+                                                   )
+
 
 process.triggerFilter = cms.EDFilter('TriggerFilter',
                                      isMC = cms.bool(options.isMC),
@@ -256,4 +328,29 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       )
 # Usually it is better to put producers on a task instead of a path
 # but paths also work.
-process.p = cms.Path(process.hltScoutingUnpackProducer+process.gtStage2Digis+process.triggerFilter+process.offlineBeamSpot+process.Vertexer+process.scoutingTree)
+if(options.doJEC):
+    process.p = cms.Path(
+        process.scoutingToRecoJets *
+        process.hltAK4PFFastJetCorrector *
+        process.hltAK4PFRelativeCorrector *
+        process.hltAK4PFAbsoluteCorrector *
+        process.hltAK4PFResidualCorrector *
+        process.hltAK4PFCorrector *
+        process.scoutingPFJetCorrected *
+        process.hltScoutingUnpackProducer *
+        process.gtStage2Digis *
+        process.triggerFilter *
+        process.offlineBeamSpot *
+        process.Vertexer *
+        process.scoutingTree
+    )
+else:
+    process.p = cms.Path(
+        process.scoutingToRecoJets *
+        process.hltScoutingUnpackProducer *
+        process.gtStage2Digis *
+        process.triggerFilter *
+        process.offlineBeamSpot *
+        process.Vertexer *
+        process.scoutingTree
+    )

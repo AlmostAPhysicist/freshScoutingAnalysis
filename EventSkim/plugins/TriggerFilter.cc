@@ -70,7 +70,7 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources> {
       virtual bool endLuminosityBlock(edm::LuminosityBlock&, edm::EventSetup const&);
   
       // ----------member data ---------------------------
-      const edm::EDGetTokenT<std::vector<Run3ScoutingPFJet> >  pfjetsToken;
+      const edm::EDGetTokenT<std::vector<reco::PFJet> >  pfjetsToken;
       const edm::EDGetTokenT<std::vector<pat::Jet> >  patjetsToken;
       const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
       const edm::EDGetTokenT<std::vector<reco::GenJet>> GenJetToken_;
@@ -120,7 +120,7 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources> {
 // constructors and destructor
 //
 TriggerFilter::TriggerFilter(const edm::ParameterSet& iConfig):
-  pfjetsToken(consumes<std::vector<Run3ScoutingPFJet> >(iConfig.getParameter<edm::InputTag>("pfjets"))),
+  pfjetsToken(consumes<std::vector<reco::PFJet> >(iConfig.getParameter<edm::InputTag>("pfjets"))),
   patjetsToken(consumes<std::vector<pat::Jet> >(iConfig.getParameter<edm::InputTag>("patjets"))),
   GeneratorToken_(consumes(iConfig.getParameter<edm::InputTag>("generatorName"))),
   GenJetToken_(consumes(iConfig.getParameter<edm::InputTag>("genJet_src"))),
@@ -140,7 +140,7 @@ TriggerFilter::TriggerFilter(const edm::ParameterSet& iConfig):
   l1Seeds_ = iConfig.getParameter<std::vector<std::string> >("l1Seeds");
   l1GtUtils_ = std::make_unique<l1t::L1TGlobalUtil>(iConfig, consumesCollector(), *this, algInputTag_, extInputTag_, l1t::UseEventSetupIn::Event);
   if(isScouting){
-    produces<std::vector<Run3ScoutingPFJet>>("pfjets");
+    produces<std::vector<reco::PFJet>>("pfjets");
   }
   else{
     produces<std::vector<pat::Jet>>("patjets");
@@ -292,9 +292,9 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   
   int nPFJets = -1;
   //Get the jets
-  Handle<vector<Run3ScoutingPFJet> > pfjetsH;
+  Handle<vector<reco::PFJet> > pfjetsH;
   iEvent.getByToken(pfjetsToken, pfjetsH);
-  std::unique_ptr<std::vector<Run3ScoutingPFJet>> pfJetVector(new std::vector<Run3ScoutingPFJet>());
+  std::unique_ptr<std::vector<reco::PFJet>> pfJetVector(new std::vector<reco::PFJet>());
 
   //Require 4 PF Jets
   if(pfjetsH.isValid() && isScouting){
@@ -306,7 +306,7 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
         int binY = jetVetoMap_->GetYaxis()->FindBin(jets_iter->phi());
         float maskBit = jetVetoMap_->GetBinContent(binX, binY);
 
-	float energy = TMath::Sqrt(pow(TMath::CosH(Jet_eta)*jets_iter->pt(),2)+pow(jets_iter->m(),2));
+	float energy = TMath::Sqrt(pow(TMath::CosH(Jet_eta)*jets_iter->pt(),2)+pow(jets_iter->mass(),2));
 	float Jet_chHEF = jets_iter->chargedHadronEnergy()/energy;
 	float Jet_neHEF = jets_iter->neutralHadronEnergy()/energy;
 	float Jet_muEF = jets_iter->muonEnergy()/energy;
