@@ -124,6 +124,7 @@
   <class name="edm::Wrapper<std::vector<ScoutingPhoton> >"/>
   <class name="edm::Wrapper<std::vector<ScoutingTrack> >"/> 
   <class name="edm::Wrapper<std::vector<ScoutingVertex> >"/>
+  <class name="edm::Wrapper<std::map<std::basic_string<char,std::char_traits<char> >,float> >"/>
   <!-- -->
   <class name="edm::refhelper::FindUsingAdvance<std::vector<Run3ScoutingVertex>,Run3ScoutingVertex>"/>
   <class name="edm::Ref<std::vector<Run3ScoutingVertex>,Run3ScoutingVertex,edm::refhelper::FindUsingAdvance<std::vector<Run3ScoutingVertex>,Run3ScoutingVertex> >"/>
