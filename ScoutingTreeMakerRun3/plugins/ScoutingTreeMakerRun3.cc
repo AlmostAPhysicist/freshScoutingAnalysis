@@ -27,6 +27,9 @@
 // user include files
 #include "FWCore/Framework/interface/Frameworkfwd.h"
 #include "FWCore/Framework/interface/one/EDAnalyzer.h"
+#include "CondFormats/DataRecord/interface/BeamSpotOnlineHLTObjectsRcd.h"
+#include "CondFormats/BeamSpotObjects/interface/BeamSpotObjects.h"
+#include "CondFormats/BeamSpotObjects/interface/BeamSpotOnlineObjects.h"
 
 #include "FWCore/Framework/interface/Event.h"
 #include "FWCore/Framework/interface/MakerMacros.h"
@@ -131,7 +134,8 @@ private:
   const edm::EDGetTokenT<std::vector<reco::Track> >  recoTracksToken;
 
   const edm::EDGetTokenT<std::vector<PileupSummaryInfo>> truePileupToken;
-  
+
+  const edm::ESGetToken<BeamSpotOnlineObjects, BeamSpotOnlineHLTObjectsRcd> bsOnlineToken_;
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::GenParticle>> GenParticleToken_;
   const edm::EDGetTokenT<std::vector<reco::GenJet>> GenJetToken_;
@@ -517,7 +521,8 @@ private:
     
   }
 
-  std::pair<double,double> gen_dxy_correction(std::vector<reco::GenParticle>::const_iterator gtk, const edm::Handle<reco::BeamSpot> refpoint){
+  template <typename T>
+  std::pair<double,double> gen_dxy_correction(std::vector<reco::GenParticle>::const_iterator gtk, const T refpoint){
     // calculate dxy for gen track
     double r = 88.*gtk->pt();
     double cx = gtk->vx() + gtk->charge() * r * sin(gtk->phi());
@@ -613,6 +618,7 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   verticesToken            (consumes<std::vector<reco::Vertex> >           (iConfig.getParameter<edm::InputTag>("displacedVertices"))),  
   recoTracksToken              (consumes<std::vector<reco::Track> >            (iConfig.getParameter<edm::InputTag>("recoTrack"))),
   truePileupToken(consumes<std::vector<PileupSummaryInfo>>(iConfig.getParameter<edm::InputTag>("truePileup"))),
+  bsOnlineToken_(esConsumes<BeamSpotOnlineObjects, BeamSpotOnlineHLTObjectsRcd>()),
   beamspot_token(consumes<reco::BeamSpot>(iConfig.getParameter<edm::InputTag>("beamspot_src"))),
   GenParticleToken_(consumes(iConfig.getParameter<edm::InputTag>("genParticle_src"))),
   GenJetToken_(consumes(iConfig.getParameter<edm::InputTag>("genJet_src"))),
@@ -878,10 +884,31 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     }
     
   }
-    
+
+  const auto& bs = iSetup.getData(bsOnlineToken_);
+  reco::BeamSpot::CovarianceMatrix onlineCovariance;
+  for(uint i=0; i<7; i++){
+    for(uint j=i; j<7; j++){
+      onlineCovariance(i,j) = bs.covariance(i,j);
+    }
+  }
+  reco::BeamSpot::Point onlinePosition(bs.x(), bs.y(), bs.z());
+  reco::BeamSpot* beamspot = new BeamSpot(onlinePosition,
+					 bs.sigmaZ(),
+					 bs.dxdz(),
+					 bs.dydz(),
+					 bs.beamWidthX(),
+					 onlineCovariance,
+					 static_cast<reco::BeamSpot::BeamType>(bs.beamType())
+					 );
+  beamspot->setBeamWidthY(bs.beamWidthY());
+  beamspot->setEmittanceX(bs.emittanceX());
+  beamspot->setEmittanceY(bs.emittanceY());
+  beamspot->setbetaStar(bs.betaStar());
+  
   //Get the beamspot
-  edm::Handle<reco::BeamSpot> beamspot;
-  iEvent.getByToken(beamspot_token, beamspot);
+  //edm::Handle<reco::BeamSpot> beamspot; // temp to test switching from offline to online beamspot
+  //iEvent.getByToken(beamspot_token, beamspot); // same as above
   const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
   beamspot_x = beamspot->x0();
   beamspot_xErr = beamspot->x0Error();
@@ -1576,37 +1603,37 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
   if(pfjetsH.isValid()){
     //Get the jets distributions
-    ptjet1 = pfJetVector[0].pt();
-    ptjet2 = pfJetVector[1].pt();
-    ptjet3 = pfJetVector[2].pt();
+    if(pfJetVector.size()>0) ptjet1 = pfJetVector[0].pt();
+    if(pfJetVector.size()>1) ptjet2 = pfJetVector[1].pt();
+    if(pfJetVector.size()>2) ptjet3 = pfJetVector[2].pt();
     if(pfJetVector.size()>3) ptjet4 = pfJetVector[3].pt();
     
-    etajet1 = pfJetVector[0].eta();
-    etajet2 = pfJetVector[1].eta();
-    etajet3 = pfJetVector[2].eta();
+    if(pfJetVector.size()>0) etajet1 = pfJetVector[0].eta();
+    if(pfJetVector.size()>1) etajet2 = pfJetVector[1].eta();
+    if(pfJetVector.size()>2) etajet3 = pfJetVector[2].eta();
     if(pfJetVector.size()>3) etajet4 = pfJetVector[3].eta();
     
-    phijet1 = pfJetVector[0].phi();
-    phijet2 = pfJetVector[1].phi();
-    phijet3 = pfJetVector[2].phi();
+    if(pfJetVector.size()>0) phijet1 = pfJetVector[0].phi();
+    if(pfJetVector.size()>1) phijet2 = pfJetVector[1].phi();
+    if(pfJetVector.size()>2) phijet3 = pfJetVector[2].phi();
     if(pfJetVector.size()>3) phijet4 = pfJetVector[3].phi();
   }
 
   if(patjetsH.isValid()){
     //Get the jets distributions
-    ptjet1 = patJetVector[0].pt();
-    ptjet2 = patJetVector[1].pt();
-    ptjet3 = patJetVector[2].pt();
+    if(patJetVector.size()>0) ptjet1 = patJetVector[0].pt();
+    if(patJetVector.size()>1) ptjet2 = patJetVector[1].pt();
+    if(patJetVector.size()>2) ptjet3 = patJetVector[2].pt();
     if(patJetVector.size()>3) ptjet4 = patJetVector[3].pt();
     
-    etajet1 = patJetVector[0].eta();
-    etajet2 = patJetVector[1].eta();
-    etajet3 = patJetVector[2].eta();
+    if(patJetVector.size()>0) etajet1 = patJetVector[0].eta();
+    if(patJetVector.size()>1) etajet2 = patJetVector[1].eta();
+    if(patJetVector.size()>2) etajet3 = patJetVector[2].eta();
     if(patJetVector.size()>3) etajet4 = patJetVector[3].eta();
     
-    phijet1 = patJetVector[0].phi();
-    phijet2 = patJetVector[1].phi();
-    phijet3 = patJetVector[2].phi();
+    if(patJetVector.size()>0) phijet1 = patJetVector[0].phi();
+    if(patJetVector.size()>1) phijet2 = patJetVector[1].phi();
+    if(patJetVector.size()>2) phijet3 = patJetVector[2].phi();
     if(patJetVector.size()>3) phijet4 = patJetVector[3].phi();
   }
   
@@ -1621,7 +1648,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     dBV_1 = dBV_Meas1D_1.value();
     bs2derr_1 = dBV_Meas1D_1.error();
 
-    if(dBV_1<0.01) return;
+    if(dBV_1<0.01) return; 
 
     h_genWeights->Fill("dBV",genWeight);
     h_weights->Fill("dBV",theWeight);

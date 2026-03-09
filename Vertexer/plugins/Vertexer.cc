@@ -19,6 +19,10 @@
 // system include files
 #include <memory>
 
+#include "CondFormats/DataRecord/interface/BeamSpotOnlineHLTObjectsRcd.h"
+#include "CondFormats/BeamSpotObjects/interface/BeamSpotObjects.h"
+#include "CondFormats/BeamSpotObjects/interface/BeamSpotOnlineObjects.h"
+
 #include "FWCore/Framework/interface/one/EDAnalyzer.h"
 #include "FWCore/MessageLogger/interface/MessageLogger.h"
 #include "MagneticField/Engine/interface/MagneticField.h"
@@ -136,6 +140,7 @@ private:
   const int max_nm1_refit_count;
   const bool investigate_merged_vertices;
   const bool verbose;
+  const edm::ESGetToken<BeamSpotOnlineObjects, BeamSpotOnlineHLTObjectsRcd> bsOnlineToken_;
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::Track>> seed_tracks_token_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> token_builder;
@@ -266,7 +271,7 @@ Vertexer::Vertexer(edm::ParameterSet const& params)
   max_nm1_refit_count(params.getParameter<int>("max_nm1_refit_count")),
   investigate_merged_vertices(params.getParameter<bool>("investigate_merged_vertices")),
   verbose(params.getParameter<bool>("verbose")),
-  
+  bsOnlineToken_(esConsumes<BeamSpotOnlineObjects, BeamSpotOnlineHLTObjectsRcd>()),
   beamspot_token(consumes<reco::BeamSpot>(params.getParameter<edm::InputTag>("beamspot_src"))),
   seed_tracks_token_(consumes(params.getParameter<edm::InputTag>("seed_tracks_src"))),
   token_builder(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
@@ -299,9 +304,29 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   //////////////////////////////////////////////////////////////////////                                                                              
   // DataFormats setup and track preselection                                                                                
   ////////////////////////////////////////////////////////////////////// 
+  const auto& bs = iSetup.getData(bsOnlineToken_);
+  reco::BeamSpot::CovarianceMatrix onlineCovariance;
+  for(uint i=0; i<7; i++){
+    for(uint j=i; j<7; j++){
+      onlineCovariance(i,j) = bs.covariance(i,j);
+    }
+  }
+  reco::BeamSpot::Point onlinePosition(bs.x(), bs.y(), bs.z());
+  reco::BeamSpot* beamspot = new reco::BeamSpot(onlinePosition,
+					  bs.sigmaZ(),
+					  bs.dxdz(),
+					  bs.dydz(),
+					  bs.beamWidthX(),
+					  onlineCovariance,
+					  static_cast<reco::BeamSpot::BeamType>(bs.beamType())
+					  );
+  beamspot->setBeamWidthY(bs.beamWidthY());
+  beamspot->setEmittanceX(bs.emittanceX());
+  beamspot->setEmittanceY(bs.emittanceY());
+  beamspot->setbetaStar(bs.betaStar());
   
-  edm::Handle<reco::BeamSpot> beamspot;
-  iEvent.getByToken(beamspot_token, beamspot);
+  //edm::Handle<reco::BeamSpot> beamspot; //temp while testing online beam spot
+  //iEvent.getByToken(beamspot_token, beamspot); //same as above
   const double bsx = beamspot->position().x();
   const double bsy = beamspot->position().y();
   const double bsz = beamspot->position().z();

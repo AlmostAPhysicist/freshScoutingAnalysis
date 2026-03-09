@@ -23,6 +23,18 @@ inputDatasets = ["/QCD-4Jets_Bin-HT-200to400_TuneCP5_13p6TeV_madgraphMLM-pythia8
                  "/StopStopbarTo2Dbar2D_M-800_CTau-10mm_Summer24_100k_v2/brlopesd-StopStopbarTo2Dbar2D_M-800_CTau-10mm_Summer24_100k_miniAOD_v2-df1e99b50d14b85be33e7e4ab518ee3a/USER",
                  "/StopStopbarTo2Dbar2D_M-800_CTau-1mm_Summer24_100k_v2/brlopesd-StopStopbarTo2Dbar2D_M-800_CTau-1mm_Summer24_100k_miniAOD_v2-df1e99b50d14b85be33e7e4ab518ee3a/USER",
                  "/StopStopbarTo2Dbar2D_M-800_CTau-3mm_Summer24_100k_v2/brlopesd-StopStopbarTo2Dbar2D_M-800_CTau-3mm_Summer24_100k_miniAOD_v2-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-200_ctau-0p1mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-200_ctau-0p1mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-200_ctau-0p3mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-200_ctau-0p3mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-200_ctau-0p7mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-200_ctau-0p7mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-400_ctau-0p1mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-400_ctau-0p1mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-400_ctau-0p3mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-400_ctau-0p3mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-400_ctau-0p7mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-400_ctau-0p7mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-600_ctau-0p1mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-600_ctau-0p1mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-600_ctau-0p3mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-600_ctau-0p3mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-600_ctau-0p7mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-600_ctau-0p7mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-800_ctau-0p1mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-800_ctau-0p1mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-800_ctau-0p3mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-800_ctau-0p3mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
+                 "/StopStopbarTo2Dbar2D_M-800_ctau-0p7mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-800_ctau-0p7mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER",
                  "/ScoutingPFRun3/Run2024C-v1/HLTSCOUT",
                  "/ScoutingPFRun3/Run2024D-v1/HLTSCOUT",
                  "/ScoutingPFRun3/Run2024E-v1/HLTSCOUT",
@@ -54,7 +66,7 @@ inputDatasets = ["/QCD-4Jets_Bin-HT-200to400_TuneCP5_13p6TeV_madgraphMLM-pythia8
                  ]
 
 crossSections = [1961000000, 95620000, 13540000, 3033000, 883700, 383500, 125200, 26490, 311400000000, 58500000000, 25400000000, 762100, 762100] #Backgrounds should go first in dataset list with corresponding cross sections listed here
-tagSuffix = "v22-2to4Dxy"
+tagSuffix = "v24-3to4Dxy-OnlineBS"
 scouting = True
 
 for i in range(len(inputDatasets)):
@@ -77,9 +89,16 @@ for i in range(len(inputDatasets)):
         mass = mass[:3]
         lifetime = dataset.split("-")[2]
         lifetime = lifetime.split("mm")[0]
-        PUFile = f"Stop-M{mass}-cT{lifetime}_PURatio_Full2024.npy"
+        if("step4" in dataset):
+            PUFile = "Stop-M200-cT1_PURatio_Full2024.npy"
+        else:
+            PUFile = f"Stop-M{mass}-cT{lifetime}_PURatio_Full2024.npy"
     if "Stop" in dataset:
-        tag = dataset[1:].split("_Summer24")[0] + "_Tree_" + tagSuffix
+        tag = ""
+        if ("step4" in dataset):
+            tag = dataset[1:].split("_100kEvts")[0] + "_Tree_" + tagSuffix
+        else:
+            tag = dataset[1:].split("_Summer24")[0] + "_Tree_" + tagSuffix
         dataBase = "phys03"
         totalUnits = 100000
         isMC = True
@@ -89,10 +108,10 @@ for i in range(len(inputDatasets)):
     elif "ScoutingPF" in dataset:
         tag = dataset[16:].split("-v1")[0] + "_Tree_" + tagSuffix
         dataBase = "global"
-        totalUnits = 300000000
+        totalUnits = 900000000
         isMC = False
         hasReco = False
-        unitsPerJob = 300000
+        unitsPerJob = 150000
         splitting = 'EventAwareLumiBased'
     elif "GluGluH" in dataset:
         tag = dataset[1:].split("_Tune")[0] + "_Tree_" + tagSuffix
@@ -124,18 +143,24 @@ config.Data.unitsPerJob = {unitsPerJob} \n
 config.Data.totalUnits = {totalUnits} \n
 config.Data.allowNonValidInputDataset = True \n
 config.Data.publication = False \n
-config.JobType.pyCfgParams = ['isScouting={scouting}','lumi=108.96','crossSection={crossSection}','isMC={isMC}','hasReco={hasReco}','PUFile=/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/{PUFile}'] \n
+config.JobType.pyCfgParams = ['isScouting={scouting}','lumi=114.44','crossSection={crossSection}','isMC={isMC}','hasReco={hasReco}','PUFile=/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/{PUFile}','doJEC=False'] \n
 config.Data.outputDatasetTag = theTag \n
 config.Data.outLFNDirBase = '/store/group/phys_exotica/DVScouting' \n
 config.Site.storageSite = 'T2_CH_CERN' \n
-config.Site.blacklist=['T2_US_MIT'] \n""" 
+config.Data.ignoreLocality = True \n
+config.Site.whitelist = ['T2_*', 'T1_*'] \n
+""" 
 
     # Write to a temporary file
     if "Stop" in dataset:
-        string += """config.Site.whitelist = ['T2_CH_CERN'] \n
-config.Data.ignoreLocality = True"""
-        with open("crabSubmitScripts/"+dataset[1:].split("_Summer24")[0]+"_crabConfig.py", "w") as f:
-            f.write(string)
+        #string += """config.Site.whitelist = ['T2_CH_CERN'] \n
+#config.Data.ignoreLocality = True"""
+        if ("step4" in dataset):
+            with open("crabSubmitScripts/"+dataset[1:].split("_100kEvts")[0]+"_crabConfig.py", "w") as f:
+                f.write(string)
+        else:
+            with open("crabSubmitScripts/"+dataset[1:].split("_Summer24")[0]+"_crabConfig.py", "w") as f:
+                f.write(string)
     elif "ScoutingPF" in dataset:
         string += f"""config.Data.lumiMask = '../GoldenJSON/2024' + '{dataset[23]}' + '_Golden.json'"""
         with open("crabSubmitScripts/"+dataset[16:].split("-v1")[0]+"_crabConfig.py", "w") as f:
