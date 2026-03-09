@@ -43,6 +43,33 @@ options.register('PUFile',
                  "Name of pileup correction file to use"
     )
 
+## Trigger corrections to use
+options.register('TriggerCorrectionsNominal',
+                 'TriggerCorrections/weights_trigger_2024_nominal.npy',
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.string,
+                 "Nominal value of the trigger efficiency corrections"
+    )
+options.register('TriggerCorrectionsUp',
+                 'TriggerCorrections/weights_trigger_2024_up.npy',
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.string,
+                 "Upper bound of the trigger efficiency corrections"
+    )
+options.register('TriggerCorrectionsDown',
+                 'TriggerCorrections/weights_trigger_2024_down.npy',
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.string,
+                 "Lower bound of the trigger efficiency corrections"
+    )
+options.register('TriggerCorrectionsBinEdge',
+                 'TriggerCorrections/weights_trigger_2024_xedge.npy',
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.string,
+                 "Upper bin edges in HT of the trigger corrections"
+    )
+# ------
+
 options.register('doJEC',
                  True,
                  VarParsing.VarParsing.multiplicity.singleton,
@@ -61,14 +88,19 @@ process.options = cms.untracked.PSet(
 process.MessageLogger.cerr.FwkSummary.reportEvery = 100
 process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(1000) )
 PUCorrectionData = np.load(options.PUFile)
+
+TriggerCorrectionNominal = np.load(options.TriggerCorrectionsNominal)
+TriggerCorrectionUp = np.load(options.TriggerCorrectionsUp)
+TriggerCorrectionDown = np.load(options.TriggerCorrectionsDown)
+TriggerCorrectionBinEdge = np.load(options.TriggerCorrectionsBinEdge)
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
         #MC test file
         #'/store/mc/RunIII2024Summer24MiniAOD/QCD-4Jets_Bin-HT-1000to1200_TuneCP5_13p6TeV_madgraphMLM-pythia8/MINIAODSIM/140X_mcRun3_2024_realistic_v26-v2/100000/00f7403b-49bf-4efd-9b8f-0398bd61d910.root'
-        #'/store/user/brlopesd/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_v2/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_miniAOD_v2/250214_150834/0000/stop_dbar_miniAOD_1.root'
+        '/store/user/brlopesd/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_v2/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_miniAOD_v2/250214_150834/0000/stop_dbar_miniAOD_1.root'
         #Data test file
         #'/store/data/Run2024D/ScoutingPFRun3/HLTSCOUT/v1/000/380/945/00000/cdf45723-07c4-4b41-9595-f368f2929369.root'
         #PF monitor file
@@ -312,7 +344,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       PUCorrectionArray = cms.vdouble(*PUCorrectionData.flatten().tolist()),
                                       truePileup        = truePileupTag,
                                       l1Seeds           = cms.vstring(L1Info),
-                                      muons             = cms.InputTag("hltScoutingMuonPacker"),
+                                      muons             = cms.InputTag("hltScoutingMuonPackerNoVtx"),
                                       electrons         = cms.InputTag("hltScoutingEgammaPacker"),
                                       photons           = cms.InputTag("hltScoutingEgammaPacker"),
                                       pfjets            = skimPFJetsTag,
@@ -332,7 +364,11 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       genJet_src = cms.InputTag('slimmedGenJets',''),
                                       generatorName = cms.InputTag('generator'),
                                       scoutingParticle = scoutingPFTag,
-                                      weightMap = cms.InputTag("triggerFilter", "weightMap")
+                                      weightMap = cms.InputTag("triggerFilter", "weightMap"),
+                                      triggerNominal = cms.vdouble(*TriggerCorrectionNominal.flatten().tolist()),
+                                      triggerUp = cms.vdouble(*TriggerCorrectionUp.flatten().tolist()),
+                                      triggerDown = cms.vdouble(*TriggerCorrectionDown.flatten().tolist()),
+                                      triggerEdge = cms.vdouble(*TriggerCorrectionBinEdge.flatten().tolist())
                                       )
 # Usually it is better to put producers on a task instead of a path
 # but paths also work.

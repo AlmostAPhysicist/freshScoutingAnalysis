@@ -155,6 +155,7 @@ private:
   double crossSection;
   std::vector<double> PUCorrectionArray;
   double isMC;
+
   triggerExpression::Data triggerCache_;
 
   bool L1_HTT200er;
@@ -180,6 +181,12 @@ private:
   std::vector<std::string>     l1Seeds_;
   std::vector<bool>            l1Result_;
   const edm::EDGetTokenT<std::map<std::string, float>> weightsToken_;
+
+  std::vector<double> triggerNominal;
+  std::vector<double> triggerUp;
+  std::vector<double> triggerDown;
+  std::vector<double> triggerEdge;
+
   TTree* tree;
   TTree* objectTree;
 
@@ -372,6 +379,11 @@ private:
   float beamspot_yWidth;
   float beamspot_widthErr;
   int beamspot_type;
+
+  float ht_corrected;
+  float weight_trigger_nominal;
+  float weight_trigger_up;
+  float weight_trigger_down;
   
   int eventId;
   int runNumber;
@@ -595,7 +607,35 @@ private:
     h->SetBinContent(0,0);
     h->SetBinContent(nbins+1,0);
   }
-  
+
+bool matchesPF(int ID, double tolerance, Run3ScoutingMuon const& muonTrack,  edm::Handle<std::vector<Run3ScoutingParticle>> const& scoutingParticleH){
+
+  bool matches = false;
+
+  float mu_eta = muonTrack.eta();
+  float mu_phi = muonTrack.phi();
+
+  double dEta;
+  double dPhi;
+  double dR;
+
+  for (size_t pf_index = 0; pf_index < scoutingParticleH->size(); pf_index++) {
+    auto & scoutingPFCandidate = scoutingParticleH->at(pf_index);
+
+    float pf_eta = scoutingPFCandidate.eta();
+    float pf_phi = scoutingPFCandidate.phi();
+
+    dEta = mu_eta - pf_eta;
+    dPhi = deltaPhi(mu_phi, pf_phi);
+    dR = sqrt(pow(dEta, 2) + pow(dPhi, 2));
+
+    if(abs(scoutingPFCandidate.pdgId()) == 13 && dR < tolerance){
+          matches = true;
+      }
+  }
+  return matches;
+}
+
 };
 
 ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
@@ -634,7 +674,11 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0),
   PUCorrectionArray(iConfig.getParameter<std::vector<double>>("PUCorrectionArray")),
   isMC                    (iConfig.existsAs<bool>("isMC")               ?    iConfig.getParameter<bool>  ("isMC")            : false),
-  weightsToken_(consumes<std::map<std::string, float>>(edm::InputTag("triggerFilter", "weightMap")))
+  weightsToken_(consumes<std::map<std::string, float>>(edm::InputTag("triggerFilter", "weightMap"))),
+  triggerNominal(iConfig.getParameter<std::vector<double>>("triggerNominal")),
+  triggerUp(iConfig.getParameter<std::vector<double>>("triggerUp")),
+  triggerDown(iConfig.getParameter<std::vector<double>>("triggerDown")),
+  triggerEdge(iConfig.getParameter<std::vector<double>>("triggerEdge"))
 {
     usesResource("TFileService");
     if (doTrigger) {
@@ -1073,18 +1117,90 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       jet_neMultiplicity->push_back(Jet_neMultiplicity);
       bool Jet_passJetIdTight = false;
       if (abs(Jet_eta) <= 2.6) 
-	Jet_passJetIdTight = (Jet_neHEF < 0.99) && (Jet_neEmEF < 0.9) && (Jet_chMultiplicity+Jet_neMultiplicity > 1) && (Jet_chHEF > 0.01) && (Jet_chMultiplicity > 0);
+	      Jet_passJetIdTight = (Jet_neHEF < 0.99) && (Jet_neEmEF < 0.9) && (Jet_chMultiplicity+Jet_neMultiplicity > 1) && (Jet_chHEF > 0.01) && (Jet_chMultiplicity > 0);
       else if (abs(Jet_eta) > 2.6 && abs(Jet_eta) <= 2.7)
-	Jet_passJetIdTight = (Jet_neHEF < 0.90) && (Jet_neEmEF < 0.99);
+	      Jet_passJetIdTight = (Jet_neHEF < 0.90) && (Jet_neEmEF < 0.99);
       else if (abs(Jet_eta) > 2.7 && abs(Jet_eta) <= 3.0)
-	Jet_passJetIdTight = (Jet_neHEF < 0.99);
+	      Jet_passJetIdTight = (Jet_neHEF < 0.99);
       else if (abs(Jet_eta) > 3.0)
-	Jet_passJetIdTight = (Jet_neMultiplicity >= 2) && (Jet_neEmEF < 0.4);
+	      Jet_passJetIdTight = (Jet_neMultiplicity >= 2) && (Jet_neEmEF < 0.4);
       jet_passJetIdTight->push_back(Jet_passJetIdTight);
       HT = HT + jet.pt();
       t++;
     }
   }
+
+  // Get same HT as in Trigger Effs
+  Handle<std::vector<Run3ScoutingMuon> > muonsH;
+  iEvent.getByToken(muonsToken, muonsH);
+
+  //Get scouting particle flow candidates
+  Handle<Run3ScoutingParticleCollection> scoutingParticle_collection_handle;
+  iEvent.getByToken(scoutingParticle_collection_token_, scoutingParticle_collection_handle);
+
+  std::vector<const Run3ScoutingMuon*> selectedMuons;
+
+  bool isPFMuon;
+
+  for (auto muons_iter = muonsH->begin(); muons_iter != muonsH->end(); ++muons_iter) {
+    isPFMuon = matchesPF(13, 0.1, *muons_iter, scoutingParticle_collection_handle);
+
+    if (muons_iter->pt() > 20 &&
+        abs(muons_iter->eta()) < 2.4 &&
+        muons_iter->normalizedChi2() < 10 &&
+        muons_iter->nTrackerLayersWithMeasurement() > 5 &&
+        muons_iter->nValidPixelHits() > 0 &&
+        muons_iter->nValidRecoMuonHits() > 0 &&
+        muons_iter->nRecoMuonMatchedStations() > 1 &&
+        muons_iter->trackIso() < 0.1 &&
+        isPFMuon == true) 
+    {
+      selectedMuons.push_back(&(*muons_iter));
+    }
+  }
+
+  float dEta_jet_mu;
+  float dPhi_jet_mu;
+  float dR_jet_mu;
+
+  ht_corrected = 0;
+  int imuon = 0;
+
+  for (auto jet: pfJetVector) {
+    if((jet.pt() > 30) && (abs(jet.eta()) < 2.4)){    
+      for (auto muon : selectedMuons) {
+        dEta_jet_mu = jet.eta() - muon->eta();
+        dPhi_jet_mu = deltaPhi(jet.phi(), muon->phi());
+        dR_jet_mu = sqrt(pow(dEta_jet_mu, 2) + pow(dPhi_jet_mu, 2));
+                
+          if(dR_jet_mu >= 0.20)
+            ht_corrected = ht_corrected + jet.pt();
+        
+        imuon++;
+      }
+      if(imuon == 0) //in case there are no muons, ofc the jet is isolated
+        ht_corrected = ht_corrected + jet.pt();
+    }
+  }
+
+  // end HT calculation
+  // get trigger weights
+
+  // Find the bin index: first edge that is >= ht_corrected
+  auto it = std::lower_bound(triggerEdge.begin(), triggerEdge.end(), ht_corrected);
+  int idx = std::distance(triggerEdge.begin(), it);
+
+  // Clamp to valid range
+  idx = std::min(idx, (int)triggerNominal.size() - 1);
+
+  weight_trigger_nominal = triggerNominal[idx];
+  weight_trigger_up = triggerUp[idx];
+  weight_trigger_down = triggerDown[idx];
+
+  //std::cout<<"ht: "<<ht_corrected<<std::endl;
+  //std::cout<<"weight_nominal: "<<weight_trigger_nominal<<std::endl;
+  //std::cout<<"weight_up: "<<weight_trigger_up<<std::endl;
+  //std::cout<<"weight_down: "<<weight_trigger_down<<std::endl;
 
   //Get the pat jets, only for MC
   Handle<vector<pat::Jet> > patjetsH;
@@ -1118,9 +1234,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     }
   }
 
-  //Get scouting particle flow candidates
-  Handle<Run3ScoutingParticleCollection> scoutingParticle_collection_handle;
-  iEvent.getByToken(scoutingParticle_collection_token_, scoutingParticle_collection_handle);
+
   
   //Get the vertices
   Handle<vector<Vertex> > verticesH;
@@ -2106,6 +2220,11 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("genJet_nConstituents",&genJet_nConstituents);
     objectTree->Branch("nGenJets", &nGenJets, "nGenJets/I");
     objectTree->Branch("genHT", &genHT, "genHT/F");
+
+    objectTree->Branch("ht_corrected", &ht_corrected, "ht_corrected/F");
+    objectTree->Branch("weight_trigger_nominal", &weight_trigger_nominal, "weight_trigger_nominal/F");
+    objectTree->Branch("weight_trigger_up", &weight_trigger_up, "weight_trigger_up/F");
+    objectTree->Branch("weight_trigger_down", &weight_trigger_down, "weight_trigger_down/F");
     
     h_genWeights->GetXaxis()->SetBinLabel(1,"None");
     h_genWeights->GetXaxis()->SetBinLabel(2,"nJets");
