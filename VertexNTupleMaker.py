@@ -280,7 +280,13 @@ process.triggerFilter = cms.EDFilter('TriggerFilter',
                                      patjets           = patjetsTag,
                                      generatorName = cms.InputTag('generator'),
                                      genJet_src = cms.InputTag('slimmedGenJets',''),
-                                     storeGenJets = cms.bool(False)
+                                     storeGenJets = cms.bool(False),
+                                     scoutingParticle = scoutingPFTag,
+                                     muons = cms.InputTag("hltScoutingMuonPackerNoVtx"),
+                                     triggerNominal = cms.vdouble(*TriggerCorrectionNominal.flatten().tolist()),
+                                     triggerUp = cms.vdouble(*TriggerCorrectionUp.flatten().tolist()),
+                                     triggerDown = cms.vdouble(*TriggerCorrectionDown.flatten().tolist()),
+                                     triggerEdge = cms.vdouble(*TriggerCorrectionBinEdge.flatten().tolist())
                                      )
 
 process.Vertexer = cms.EDProducer('Vertexer',
@@ -364,11 +370,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       genJet_src = cms.InputTag('slimmedGenJets',''),
                                       generatorName = cms.InputTag('generator'),
                                       scoutingParticle = scoutingPFTag,
-                                      weightMap = cms.InputTag("triggerFilter", "weightMap"),
-                                      triggerNominal = cms.vdouble(*TriggerCorrectionNominal.flatten().tolist()),
-                                      triggerUp = cms.vdouble(*TriggerCorrectionUp.flatten().tolist()),
-                                      triggerDown = cms.vdouble(*TriggerCorrectionDown.flatten().tolist()),
-                                      triggerEdge = cms.vdouble(*TriggerCorrectionBinEdge.flatten().tolist())
+                                      weightMap = cms.InputTag("triggerFilter", "weightMap")
                                       )
 # Usually it is better to put producers on a task instead of a path
 # but paths also work.

@@ -674,11 +674,7 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0),
   PUCorrectionArray(iConfig.getParameter<std::vector<double>>("PUCorrectionArray")),
   isMC                    (iConfig.existsAs<bool>("isMC")               ?    iConfig.getParameter<bool>  ("isMC")            : false),
-  weightsToken_(consumes<std::map<std::string, float>>(edm::InputTag("triggerFilter", "weightMap"))),
-  triggerNominal(iConfig.getParameter<std::vector<double>>("triggerNominal")),
-  triggerUp(iConfig.getParameter<std::vector<double>>("triggerUp")),
-  triggerDown(iConfig.getParameter<std::vector<double>>("triggerDown")),
-  triggerEdge(iConfig.getParameter<std::vector<double>>("triggerEdge"))
+  weightsToken_(consumes<std::map<std::string, float>>(edm::InputTag("triggerFilter", "weightMap")))
 {
     usesResource("TFileService");
     if (doTrigger) {
@@ -1186,16 +1182,9 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   // end HT calculation
   // get trigger weights
 
-  // Find the bin index: first edge that is >= ht_corrected
-  auto it = std::lower_bound(triggerEdge.begin(), triggerEdge.end(), ht_corrected);
-  int idx = std::distance(triggerEdge.begin(), it);
-
-  // Clamp to valid range
-  idx = std::min(idx, (int)triggerNominal.size() - 1);
-
-  weight_trigger_nominal = triggerNominal[idx];
-  weight_trigger_up = triggerUp[idx];
-  weight_trigger_down = triggerDown[idx];
+  weight_trigger_nominal = weightMap->at("triggerNominal");
+  weight_trigger_up = weightMap->at("triggerUp");
+  weight_trigger_down = weightMap->at("triggerDown");
 
   //std::cout<<"ht: "<<ht_corrected<<std::endl;
   //std::cout<<"weight_nominal: "<<weight_trigger_nominal<<std::endl;
