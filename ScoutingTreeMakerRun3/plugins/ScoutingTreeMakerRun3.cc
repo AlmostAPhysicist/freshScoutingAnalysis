@@ -1181,10 +1181,17 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 
   // end HT calculation
   // get trigger weights
+  if(isMC){
+    weight_trigger_nominal = weightMap->at("triggerNominal");
+    weight_trigger_up = weightMap->at("triggerUp");
+    weight_trigger_down = weightMap->at("triggerDown");
+  }
+  else{
+    weight_trigger_nominal = 1;
+    weight_trigger_up = 1;
+    weight_trigger_down = 1;
+  }
 
-  weight_trigger_nominal = weightMap->at("triggerNominal");
-  weight_trigger_up = weightMap->at("triggerUp");
-  weight_trigger_down = weightMap->at("triggerDown");
 
   //std::cout<<"ht: "<<ht_corrected<<std::endl;
   //std::cout<<"weight_nominal: "<<weight_trigger_nominal<<std::endl;
