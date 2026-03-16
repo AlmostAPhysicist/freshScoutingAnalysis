@@ -92,6 +92,7 @@ private:
     bool produce_PFSKCandidate_; // SK = soft killer
 
     bool isMC_;
+    bool doUncCorrection_;
     std::vector<double> dxyErrCorrBarrel_;
     std::vector<double> dxyErrCorrDisk_;
     std::vector<double> dzErrCorrBarrel_;
@@ -114,6 +115,7 @@ HLTScoutingUnpackProducer::HLTScoutingUnpackProducer(edm::ParameterSet const& pa
       isScouting_(params.getParameter<bool>("isScouting")),
       produce_PFCHSCandidate_(params.getParameter<bool>("producePFCHSCandidate")),
       isMC_(params.getParameter<bool>("isMC")),
+      doUncCorrection_(params.getParameter<bool>("doUncCorrection")),
       dxyErrCorrBarrel_(params.getParameter<std::vector<double>>("dxyErrCorrBarrel")),
       dxyErrCorrDisk_(params.getParameter<std::vector<double>>("dxyErrCorrDisk")),
       dzErrCorrBarrel_(params.getParameter<std::vector<double>>("dzErrCorrBarrel")),
@@ -284,7 +286,7 @@ reco::Track HLTScoutingUnpackProducer::createTrack(Run3ScoutingTrack const& scou
     double dzCorrection = 1.0;
     double covCorrection = 1.0;
 
-    if(isMC_){
+    if(isMC_ && doUncCorrection_){
       if(fabs(scoutingTrack.tk_eta())<1.5){
 	dxyCorrection = dxyErrCorrBarrel_[bin];
 	dzCorrection = dzErrCorrBarrel_[bin];
@@ -541,6 +543,7 @@ void HLTScoutingUnpackProducer::fillDescriptions(edm::ConfigurationDescriptions&
     
     desc.add<bool>("producePFCHSCandidate", false);
     desc.add<bool>("isMC", true);
+    desc.add<bool>("doUncCorrection", false);
     desc.add<std::vector<double>>("covCorrBarrel", {});
     desc.add<std::vector<double>>("covCorrDisk", {});
     desc.add<std::vector<double>>("dxyErrCorrBarrel", {});
