@@ -90,6 +90,15 @@ private:
     bool produce_PFCandidateMatchTrack_;
     bool produce_PFCHSCandidate_; // CHS = charged hadron subtraction
     bool produce_PFSKCandidate_; // SK = soft killer
+
+    bool isMC_;
+    std::vector<double> dxyErrCorrBarrel_;
+    std::vector<double> dxyErrCorrDisk_;
+    std::vector<double> dzErrCorrBarrel_;
+    std::vector<double> dzErrCorrDisk_;
+    std::vector<double> covCorrBarrel_;
+    std::vector<double> covCorrDisk_;
+  
     HepPDT::ParticleDataTable const *particle_data_table_;
 
     inline static const std::string REF_TO_SCOUTING_LABEL_SUFFIX_ = "-RefToOriginal"; 
@@ -103,7 +112,14 @@ HLTScoutingUnpackProducer::HLTScoutingUnpackProducer(edm::ParameterSet const& pa
       pfCand_collection_token_(consumes(params.getParameter<edm::InputTag>("pfCand"))),
       lostTrack_collection_token_(consumes(params.getParameter<edm::InputTag>("lostTrack"))),
       isScouting_(params.getParameter<bool>("isScouting")),
-      produce_PFCHSCandidate_(params.getParameter<bool>("producePFCHSCandidate")){
+      produce_PFCHSCandidate_(params.getParameter<bool>("producePFCHSCandidate")),
+      isMC_(params.getParameter<bool>("isMC")),
+      dxyErrCorrBarrel_(params.getParameter<std::vector<double>>("dxyErrCorrBarrel")),
+      dxyErrCorrDisk_(params.getParameter<std::vector<double>>("dxyErrCorrDisk")),
+      dzErrCorrBarrel_(params.getParameter<std::vector<double>>("dzErrCorrBarrel")),
+      dzErrCorrDisk_(params.getParameter<std::vector<double>>("dzErrCorrDisk")),
+      covCorrBarrel_(params.getParameter<std::vector<double>>("covCorrBarrel")),
+      covCorrDisk_(params.getParameter<std::vector<double>>("covCorrDisk")){
       //produce_PFSKCandidate_(params.getParameter<bool>("producePFSKCandidate"))
     
     if(isScouting_){
@@ -258,6 +274,29 @@ reco::Track HLTScoutingUnpackProducer::createTrack(Run3ScoutingTrack const& scou
     reco::TrackBase::Vector momentum(px, py, pz);
     
     int charge = scoutingTrack.tk_charge();
+
+    float binWidth = 2.0;
+    int bin = static_cast<int>(scoutingTrack.tk_pt() / binWidth);
+    if(scoutingTrack.tk_pt()>=50){
+      bin = 24;
+    }
+    double dxyCorrection = 1.0;
+    double dzCorrection = 1.0;
+    double covCorrection = 1.0;
+
+    if(isMC_){
+      if(fabs(scoutingTrack.tk_eta())<1.5){
+	dxyCorrection = dxyErrCorrBarrel_[bin];
+	dzCorrection = dzErrCorrBarrel_[bin];
+	covCorrection = covCorrBarrel_[bin];
+      }
+      else{
+	dxyCorrection = dxyErrCorrDisk_[bin];
+	dzCorrection = dzErrCorrDisk_[bin];
+	covCorrection = covCorrDisk_[bin];
+      }
+    }
+			       
     
     std::vector<float> cov_vec(15); // 5*(5+1)/2 = 15
     cov_vec[0] = scoutingTrack.tk_qoverp_Error() * scoutingTrack.tk_qoverp_Error(); // cov(0, 0)
@@ -272,9 +311,9 @@ reco::Track HLTScoutingUnpackProducer::createTrack(Run3ScoutingTrack const& scou
     cov_vec[5] = scoutingTrack.tk_phi_Error() * scoutingTrack.tk_phi_Error(); // cov(2, 2) 
     cov_vec[8] = scoutingTrack.tk_phi_dxy_cov(); // cov(2, 3)
     cov_vec[12] = scoutingTrack.tk_phi_dsz_cov(); // cov(2, 4)
-    cov_vec[9] = scoutingTrack.tk_dxy_Error() * scoutingTrack.tk_dxy_Error(); // cov(3, 3)
-    cov_vec[13] = scoutingTrack.tk_dxy_dsz_cov(); // cov(3, 4)
-    cov_vec[14] = scoutingTrack.tk_dsz_Error() * scoutingTrack.tk_dsz_Error(); // cov(4, 4)
+    cov_vec[9] = scoutingTrack.tk_dxy_Error() * scoutingTrack.tk_dxy_Error() * pow(dxyCorrection,2); // cov(3, 3)
+    cov_vec[13] = scoutingTrack.tk_dxy_dsz_cov() * covCorrection; // cov(3, 4)
+    cov_vec[14] = scoutingTrack.tk_dsz_Error() * scoutingTrack.tk_dsz_Error() * pow(dzCorrection,2); // cov(4, 4)
     reco::TrackBase::CovarianceMatrix cov(cov_vec.begin(), cov_vec.end());
 
     //std::cout<<"scouting track vertex index: "<<scoutingTrack.tk_vtxInd()<<" track dz: "<<scoutingTrack.tk_dz()<<std::endl;
@@ -501,6 +540,13 @@ void HLTScoutingUnpackProducer::fillDescriptions(edm::ConfigurationDescriptions&
     desc.add<bool>("isScouting", true);
     
     desc.add<bool>("producePFCHSCandidate", false);
+    desc.add<bool>("isMC", true);
+    desc.add<std::vector<double>>("covCorrBarrel", {});
+    desc.add<std::vector<double>>("covCorrDisk", {});
+    desc.add<std::vector<double>>("dxyErrCorrBarrel", {});
+    desc.add<std::vector<double>>("dxyErrCorrDisk", {});
+    desc.add<std::vector<double>>("dzErrCorrBarrel", {});
+    desc.add<std::vector<double>>("dzErrCorrDisk", {});
     //desc.add<bool>("producePFSKCandidate", false);
 
     descriptions.addWithDefaultLabel(desc);

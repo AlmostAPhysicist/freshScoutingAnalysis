@@ -345,30 +345,31 @@ private:
   std::vector<float>* scoutVert_pMag;
   int scoutVert_nVertices;
   double weight;
-  double weight_BCDEFGHI_nominal;
-  double weight_BCDEFGHI_up;
-  double weight_BCDEFGHI_down;
-  double weight_C_nominal;
-  double weight_C_up;
-  double weight_C_down;
-  double weight_D_nominal;
-  double weight_D_up;
-  double weight_D_down;
-  double weight_E_nominal;
-  double weight_E_up;
-  double weight_E_down;
-  double weight_F_nominal;
-  double weight_F_up;
-  double weight_F_down;
-  double weight_G_nominal;
-  double weight_G_up;
-  double weight_G_down;
-  double weight_H_nominal;
-  double weight_H_up;
-  double weight_H_down;
-  double weight_I_nominal;
-  double weight_I_up;
-  double weight_I_down;
+  double uncorrectedWeight;
+  double weight_PU_BCDEFGHI_nominal;
+  double weight_PU_BCDEFGHI_up;
+  double weight_PU_BCDEFGHI_down;
+  double weight_PU_C_nominal;
+  double weight_PU_C_up;
+  double weight_PU_C_down;
+  double weight_PU_D_nominal;
+  double weight_PU_D_up;
+  double weight_PU_D_down;
+  double weight_PU_E_nominal;
+  double weight_PU_E_up;
+  double weight_PU_E_down;
+  double weight_PU_F_nominal;
+  double weight_PU_F_up;
+  double weight_PU_F_down;
+  double weight_PU_G_nominal;
+  double weight_PU_G_up;
+  double weight_PU_G_down;
+  double weight_PU_H_nominal;
+  double weight_PU_H_up;
+  double weight_PU_H_down;
+  double weight_PU_I_nominal;
+  double weight_PU_I_up;
+  double weight_PU_I_down;
   float beamspot_x;
   float beamspot_y;
   float beamspot_z;
@@ -379,6 +380,12 @@ private:
   float beamspot_yWidth;
   float beamspot_widthErr;
   int beamspot_type;
+  float offlineBeamspot_x;
+  float offlineBeamspot_y;
+  float offlineBeamspot_z;
+  float offlineBeamspot_xErr;
+  float offlineBeamspot_yErr;
+  float offlineBeamspot_zErr;
 
   float ht_corrected;
   float weight_trigger_nominal;
@@ -854,7 +861,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     genWeight = generatorHandle->weight();
     h_genWeights->Fill("None",genWeight);
     theWeight = genWeight*luminosity*crossSection;
-
+    uncorrectedWeight = theWeight;
+    
     edm::Handle<std::vector<PileupSummaryInfo>> pileup;
     iEvent.getByToken(truePileupToken, pileup);
     std::vector<PileupSummaryInfo>::const_iterator pileupIter;
@@ -864,30 +872,30 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       }
     }
 
-    weight_BCDEFGHI_nominal = weightMap->at("PU_BCDEFGHI_nominal");
-    weight_BCDEFGHI_up = weightMap->at("PU_BCDEFGHI_up");
-    weight_BCDEFGHI_down = weightMap->at("PU_BCDEFGHI_down");
-    weight_C_nominal = weightMap->at("PU_C_nominal");
-    weight_C_up = weightMap->at("PU_C_up");
-    weight_C_down = weightMap->at("PU_C_down");
-    weight_D_nominal = weightMap->at("PU_D_nominal");
-    weight_D_up = weightMap->at("PU_D_up");
-    weight_D_down = weightMap->at("PU_D_down");
-    weight_E_nominal = weightMap->at("PU_E_nominal");
-    weight_E_up = weightMap->at("PU_E_up");
-    weight_E_down = weightMap->at("PU_E_down");
-    weight_F_nominal = weightMap->at("PU_F_nominal");
-    weight_F_up = weightMap->at("PU_F_up");
-    weight_F_down = weightMap->at("PU_F_down");
-    weight_G_nominal = weightMap->at("PU_G_nominal");
-    weight_G_up = weightMap->at("PU_G_up");
-    weight_G_down = weightMap->at("PU_G_down");
-    weight_H_nominal = weightMap->at("PU_H_nominal");
-    weight_H_up = weightMap->at("PU_H_up");
-    weight_H_down = weightMap->at("PU_H_down");
-    weight_I_nominal = weightMap->at("PU_I_nominal");
-    weight_I_up = weightMap->at("PU_I_up");
-    weight_I_down = weightMap->at("PU_I_down");
+    weight_PU_BCDEFGHI_nominal = weightMap->at("PU_BCDEFGHI_nominal");
+    weight_PU_BCDEFGHI_up = weightMap->at("PU_BCDEFGHI_up");
+    weight_PU_BCDEFGHI_down = weightMap->at("PU_BCDEFGHI_down");
+    weight_PU_C_nominal = weightMap->at("PU_C_nominal");
+    weight_PU_C_up = weightMap->at("PU_C_up");
+    weight_PU_C_down = weightMap->at("PU_C_down");
+    weight_PU_D_nominal = weightMap->at("PU_D_nominal");
+    weight_PU_D_up = weightMap->at("PU_D_up");
+    weight_PU_D_down = weightMap->at("PU_D_down");
+    weight_PU_E_nominal = weightMap->at("PU_E_nominal");
+    weight_PU_E_up = weightMap->at("PU_E_up");
+    weight_PU_E_down = weightMap->at("PU_E_down");
+    weight_PU_F_nominal = weightMap->at("PU_F_nominal");
+    weight_PU_F_up = weightMap->at("PU_F_up");
+    weight_PU_F_down = weightMap->at("PU_F_down");
+    weight_PU_G_nominal = weightMap->at("PU_G_nominal");
+    weight_PU_G_up = weightMap->at("PU_G_up");
+    weight_PU_G_down = weightMap->at("PU_G_down");
+    weight_PU_H_nominal = weightMap->at("PU_H_nominal");
+    weight_PU_H_up = weightMap->at("PU_H_up");
+    weight_PU_H_down = weightMap->at("PU_H_down");
+    weight_PU_I_nominal = weightMap->at("PU_I_nominal");
+    weight_PU_I_up = weightMap->at("PU_I_up");
+    weight_PU_I_down = weightMap->at("PU_I_down");
     
     if(truePU>99) truePU = 99;
     theWeight *= PUCorrectionArray[truePU];
@@ -895,12 +903,13 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_weights->Fill("None",theWeight);
     h_weightsSquared->Fill("None",pow(theWeight,2));
 
-    h_weights_LUMCorrected->Fill("None",weightMap->at("PU_BCDEFGHI_nominal"));
-    h_weightsSquared_LUMCorrected->Fill("None",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+    h_weights_LUMCorrected->Fill("None",weightMap->at("correctedNominal"));
+    h_weightsSquared_LUMCorrected->Fill("None",pow(weightMap->at("correctedNominal"),2));
   }
   else {
     genWeight = 1;
     theWeight = 1;
+    uncorrectedWeight = 1;
     h_genWeights->Fill("None",genWeight);
     h_weights->Fill("None",theWeight);
     h_weightsSquared->Fill("None",pow(theWeight,2));
@@ -946,9 +955,16 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   beamspot->setEmittanceY(bs.emittanceY());
   beamspot->setbetaStar(bs.betaStar());
   
-  //Get the beamspot
-  //edm::Handle<reco::BeamSpot> beamspot; // temp to test switching from offline to online beamspot
-  //iEvent.getByToken(beamspot_token, beamspot); // same as above
+  //Get the offline beamspot
+  edm::Handle<reco::BeamSpot> offlineBeamspot; 
+  iEvent.getByToken(beamspot_token, offlineBeamspot); 
+  offlineBeamspot_x = offlineBeamspot->x0();
+  offlineBeamspot_xErr = offlineBeamspot->x0Error();
+  offlineBeamspot_y = offlineBeamspot->y0();
+  offlineBeamspot_yErr = offlineBeamspot->y0Error();
+  offlineBeamspot_z = offlineBeamspot->z0();
+  offlineBeamspot_zErr = offlineBeamspot->z0Error();
+
   const reco::Vertex fake_bs_vtx(beamspot->position(), beamspot->covariance3D());
   beamspot_x = beamspot->x0();
   beamspot_xErr = beamspot->x0Error();
@@ -1082,8 +1098,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_weightsSquared->Fill("nJets",pow(theWeight,2));
 
     if(isMC){
-      h_weights_LUMCorrected->Fill("nJets",weightMap->at("PU_BCDEFGHI_nominal"));
-      h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+      h_weights_LUMCorrected->Fill("nJets",weightMap->at("correctedNominal"));
+      h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("correctedNominal"),2));
     }
   
     HT = 0;
@@ -1214,8 +1230,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_weightsSquared->Fill("nJets",pow(theWeight,2));
 
     if(isMC){
-      h_weights_LUMCorrected->Fill("nJets",weightMap->at("PU_BCDEFGHI_nominal"));
-      h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+      h_weights_LUMCorrected->Fill("nJets",weightMap->at("correctedNominal"));
+      h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("correctedNominal"),2));
     }
     
     HT = 0;
@@ -1260,8 +1276,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_weightsSquared->Fill("nVertices",pow(theWeight,2));
 
     if(isMC){
-      h_weights_LUMCorrected->Fill("nVertices",weightMap->at("PU_BCDEFGHI_nominal"));
-      h_weightsSquared_LUMCorrected->Fill("nVertices",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+      h_weights_LUMCorrected->Fill("nVertices",weightMap->at("correctedNominal"));
+      h_weightsSquared_LUMCorrected->Fill("nVertices",pow(weightMap->at("correctedNominal"),2));
     }
     
     h_scoutVert_nVertices->Fill(vertices_ntk.size());
@@ -1765,8 +1781,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     h_weightsSquared->Fill("dBV",pow(theWeight,2));
 
     if(isMC){
-      h_weights_LUMCorrected->Fill("dBV",weightMap->at("PU_BCDEFGHI_nominal"));
-      h_weightsSquared_LUMCorrected->Fill("dBV",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+      h_weights_LUMCorrected->Fill("dBV",weightMap->at("correctedNominal"));
+      h_weightsSquared_LUMCorrected->Fill("dBV",pow(weightMap->at("correctedNominal"),2));
     }
     
     //printf("First dBV = %f, second dBV = %f\n", dBV_1, dBV_2);
@@ -1812,8 +1828,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       h_weightsSquared->Fill("Trigger",pow(theWeight,2));
 
       if(isMC){
-	h_weights_LUMCorrected->Fill("Trigger",weightMap->at("PU_BCDEFGHI_nominal"));
-	h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+	h_weights_LUMCorrected->Fill("Trigger",weightMap->at("correctedNominal"));
+	h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("correctedNominal"),2));
       }
     }
     else{
@@ -1834,8 +1850,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       h_weightsSquared->Fill("Trigger",pow(theWeight,2));
 
       if(isMC){
-	h_weights_LUMCorrected->Fill("Trigger",weightMap->at("PU_BCDEFGHI_nominal"));
-	h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+	h_weights_LUMCorrected->Fill("Trigger",weightMap->at("correctedNominal"));
+	h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("correctedNominal"),2));
       }
     }
   }
@@ -2152,30 +2168,31 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutVert_cosT",&scoutVert_cosT);
     objectTree->Branch("scoutVert_pMag",&scoutVert_pMag);
     objectTree->Branch("weight", &weight, "weight/D");
-    objectTree->Branch("weight_BCDEFGHI_nominal", &weight_BCDEFGHI_nominal, "weight_BCDEFGHI_nominal/D");
-    objectTree->Branch("weight_BCDEFGHI_up", &weight_BCDEFGHI_up, "weight_BCDEFGHI_up/D");
-    objectTree->Branch("weight_BCDEFGHI_down", &weight_BCDEFGHI_down, "weight_BCDEFGHI_down/D");
-    objectTree->Branch("weight_C_nominal", &weight_C_nominal, "weight_C_nominal/D");
-    objectTree->Branch("weight_C_up", &weight_C_up, "weight_C_up/D");
-    objectTree->Branch("weight_C_down", &weight_C_down, "weight_C_down/D");
-    objectTree->Branch("weight_D_nominal", &weight_D_nominal, "weight_D_nominal/D");
-    objectTree->Branch("weight_D_up", &weight_D_up, "weight_D_up/D");
-    objectTree->Branch("weight_D_down", &weight_D_down, "weight_D_down/D");
-    objectTree->Branch("weight_E_nominal", &weight_E_nominal, "weight_E_nominal/D");
-    objectTree->Branch("weight_E_up", &weight_E_up, "weight_E_up/D");
-    objectTree->Branch("weight_E_down", &weight_E_down, "weight_E_down/D");
-    objectTree->Branch("weight_F_nominal", &weight_F_nominal, "weight_F_nominal/D");
-    objectTree->Branch("weight_F_up", &weight_F_up, "weight_F_up/D");
-    objectTree->Branch("weight_F_down", &weight_F_down, "weight_F_down/D");
-    objectTree->Branch("weight_G_nominal", &weight_G_nominal, "weight_G_nominal/D");
-    objectTree->Branch("weight_G_up", &weight_G_up, "weight_G_up/D");
-    objectTree->Branch("weight_G_down", &weight_G_down, "weight_G_down/D");
-    objectTree->Branch("weight_H_nominal", &weight_H_nominal, "weight_H_nominal/D");
-    objectTree->Branch("weight_H_up", &weight_H_up, "weight_H_up/D");
-    objectTree->Branch("weight_H_down", &weight_H_down, "weight_H_down/D");
-    objectTree->Branch("weight_I_nominal", &weight_I_nominal, "weight_I_nominal/D");
-    objectTree->Branch("weight_I_up", &weight_I_up, "weight_I_up/D");
-    objectTree->Branch("weight_I_down", &weight_I_down, "weight_I_down/D");
+    objectTree->Branch("uncorrectedWeight", &uncorrectedWeight, "uncorrectedWeight/D");
+    objectTree->Branch("weight_PU_BCDEFGHI_nominal", &weight_PU_BCDEFGHI_nominal, "weight_PU_BCDEFGHI_nominal/D");
+    objectTree->Branch("weight_PU_BCDEFGHI_up", &weight_PU_BCDEFGHI_up, "weight_PU_BCDEFGHI_up/D");
+    objectTree->Branch("weight_PU_BCDEFGHI_down", &weight_PU_BCDEFGHI_down, "weight_PU_BCDEFGHI_down/D");
+    objectTree->Branch("weight_PU_C_nominal", &weight_PU_C_nominal, "weight_PU_C_nominal/D");
+    objectTree->Branch("weight_PU_C_up", &weight_PU_C_up, "weight_PU_C_up/D");
+    objectTree->Branch("weight_PU_C_down", &weight_PU_C_down, "weight_PU_C_down/D");
+    objectTree->Branch("weight_PU_D_nominal", &weight_PU_D_nominal, "weight_PU_D_nominal/D");
+    objectTree->Branch("weight_PU_D_up", &weight_PU_D_up, "weight_PU_D_up/D");
+    objectTree->Branch("weight_PU_D_down", &weight_PU_D_down, "weight_PU_D_down/D");
+    objectTree->Branch("weight_PU_E_nominal", &weight_PU_E_nominal, "weight_PU_E_nominal/D");
+    objectTree->Branch("weight_PU_E_up", &weight_PU_E_up, "weight_PU_E_up/D");
+    objectTree->Branch("weight_PU_E_down", &weight_PU_E_down, "weight_PU_E_down/D");
+    objectTree->Branch("weight_PU_F_nominal", &weight_PU_F_nominal, "weight_PU_F_nominal/D");
+    objectTree->Branch("weight_PU_F_up", &weight_PU_F_up, "weight_PU_F_up/D");
+    objectTree->Branch("weight_PU_F_down", &weight_PU_F_down, "weight_PU_F_down/D");
+    objectTree->Branch("weight_PU_G_nominal", &weight_PU_G_nominal, "weight_PU_G_nominal/D");
+    objectTree->Branch("weight_PU_G_up", &weight_PU_G_up, "weight_PU_G_up/D");
+    objectTree->Branch("weight_PU_G_down", &weight_PU_G_down, "weight_PU_G_down/D");
+    objectTree->Branch("weight_PU_H_nominal", &weight_PU_H_nominal, "weight_PU_H_nominal/D");
+    objectTree->Branch("weight_PU_H_up", &weight_PU_H_up, "weight_PU_H_up/D");
+    objectTree->Branch("weight_PU_H_down", &weight_PU_H_down, "weight_PU_H_down/D");
+    objectTree->Branch("weight_PU_I_nominal", &weight_PU_I_nominal, "weight_PU_I_nominal/D");
+    objectTree->Branch("weight_PU_I_up", &weight_PU_I_up, "weight_PU_I_up/D");
+    objectTree->Branch("weight_PU_I_down", &weight_PU_I_down, "weight_PU_I_down/D");
     objectTree->Branch("observedPU", &observedPU, "observedPU/I");
     objectTree->Branch("truePU", &truePU, "truePU/I");
     objectTree->Branch("nPV", &nPV, "nPV/I");
@@ -2189,6 +2206,12 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("beamspot_yWidth", &beamspot_yWidth, "beamspot_yWidth/F");
     objectTree->Branch("beamspot_widthErr", &beamspot_widthErr, "beamspot_widthErr/F");
     objectTree->Branch("beamspot_type", &beamspot_type, "beamspot_type/F");
+    objectTree->Branch("offlineBeamspot_x", &offlineBeamspot_x, "offlineBeamspot_x/F");
+    objectTree->Branch("offlineBeamspot_y", &offlineBeamspot_y, "offlineBeamspot_y/F");
+    objectTree->Branch("offlineBeamspot_z", &offlineBeamspot_z, "offlineBeamspot_z/F");
+    objectTree->Branch("offlineBeamspot_xErr", &offlineBeamspot_xErr, "offlineBeamspot_xErr/F");
+    objectTree->Branch("offlineBeamspot_yErr", &offlineBeamspot_yErr, "offlineBeamspot_yErr/F");
+    objectTree->Branch("offlineBeamspot_zErr", &offlineBeamspot_zErr, "offlineBeamspot_zErr/F");
     objectTree->Branch("eventId", &eventId, "eventId/I");
     objectTree->Branch("runNumber", &runNumber, "runNumber/I");
     objectTree->Branch("lumiBlock", &lumiBlock, "lumiBlock/I");

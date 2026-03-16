@@ -355,7 +355,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     */
     edm::Handle<std::map<std::string, float>> weightMap;
     iEvent.getByToken(weightsToken_, weightMap);
-    weight = weightMap->at("PU_BCDEFGHI_nominal");
+    weight = weightMap->at("correctedNominal");
   }
   
   //Get the Transient Track Builder

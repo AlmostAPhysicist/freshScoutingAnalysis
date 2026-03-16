@@ -19,7 +19,7 @@ options.register('hasReco',
     )
 #Will use the reco derived from the scouting if hasReco is turned to false, so deviation plots entries should all be 0
 options.register('lumi',
-                 114.44,
+                 109.99,
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.float,
                  "Integrated luminosity for weighting"
@@ -41,6 +41,13 @@ options.register('PUFile',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Name of pileup correction file to use"
+    )
+
+options.register('UncertaintyCorrectionFile',
+                 'ratio_uncertaintyCorrections.npz',
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.string,
+                 "Name of track uncertainty correction file to use"
     )
 
 ## Trigger corrections to use
@@ -88,8 +95,9 @@ process.options = cms.untracked.PSet(
 process.MessageLogger.cerr.FwkSummary.reportEvery = 100
 process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(1000) )
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
 PUCorrectionData = np.load(options.PUFile)
+UncertaintyCorrectionData = np.load(options.UncertaintyCorrectionFile)
 
 TriggerCorrectionNominal = np.load(options.TriggerCorrectionsNominal)
 TriggerCorrectionUp = np.load(options.TriggerCorrectionsUp)
@@ -100,7 +108,7 @@ process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
         #MC test file
         #'/store/mc/RunIII2024Summer24MiniAOD/QCD-4Jets_Bin-HT-1000to1200_TuneCP5_13p6TeV_madgraphMLM-pythia8/MINIAODSIM/140X_mcRun3_2024_realistic_v26-v2/100000/00f7403b-49bf-4efd-9b8f-0398bd61d910.root'
-        '/store/user/brlopesd/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_v2/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_miniAOD_v2/250214_150834/0000/stop_dbar_miniAOD_1.root'
+        #'/store/user/brlopesd/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_v2/StopStopbarTo2Dbar2D_M-200_CTau-1mm_Summer24_100k_miniAOD_v2/250214_150834/0000/stop_dbar_miniAOD_1.root'
         #Data test file
         #'/store/data/Run2024D/ScoutingPFRun3/HLTSCOUT/v1/000/380/945/00000/cdf45723-07c4-4b41-9595-f368f2929369.root'
         #PF monitor file
@@ -261,7 +269,14 @@ process.hltScoutingUnpackProducer = cms.EDProducer('HLTScoutingUnpackProducer',
                                                    lostTrack = lostTrackTag,
                                                    isScouting = cms.bool(options.isScouting),
                                                    producePFCHSCandidate = cms.bool(False),
-                                                   mightGet = cms.optional.untracked.vstring
+                                                   mightGet = cms.optional.untracked.vstring,
+                                                   isMC = cms.bool(options.isMC),
+                                                   dxyErrCorrBarrel = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dxyErr_barrel"].tolist()),
+                                                   dxyErrCorrDisk   = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dxyErr_disk"].tolist()),
+                                                   dzErrCorrBarrel  = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzErr_barrel"].tolist()),
+                                                   dzErrCorrDisk    = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzErr_disk"].tolist()),
+                                                   covCorrBarrel    = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzdxyCov_barrel"].tolist()),
+                                                   covCorrDisk      = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzdxyCov_disk"].tolist()),
                                                    )
 
 

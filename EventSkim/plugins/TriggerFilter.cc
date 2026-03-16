@@ -221,7 +221,6 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   
   double genWeight;
   double theWeight;
-  double theWeight_triggerNominal;
   
   genJet_pt->clear();
   genJet_eta->clear();
@@ -357,7 +356,6 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     genWeight = generatorHandle->weight();
     h_genWeights->Fill("None",genWeight);
     theWeight = genWeight*luminosity*crossSection;
-    theWeight_triggerNominal = theWeight * weight_trigger_nominal;
     
     edm::Handle<std::vector<PileupSummaryInfo>> pileup;
     iEvent.getByToken(truePileupToken, pileup);
@@ -373,11 +371,11 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
       auto cset = CorrectionSet::from_file(fileName);
       auto corr = cset->at("Collisions24_"+fileString+"_goldenJSON");
       for(auto variationString: pileupVariationList){
-        double w = theWeight_triggerNominal * corr->evaluate({float(truePU), variationString});
+        double w = corr->evaluate({float(truePU), variationString});
         (*weightMap)["PU_"+fileString+"_"+variationString] = w;
       }
     }
-    
+    (*weightMap)["correctedNominal"] = theWeight * weight_trigger_nominal * weightMap->at("PU_BCDEFGHI_nominal");
     (*weightMap)["triggerNominal"] = weight_trigger_nominal;
     (*weightMap)["triggerUp"] = weight_trigger_up;
     (*weightMap)["triggerDown"] = weight_trigger_down;
@@ -388,8 +386,8 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     h_weights->Fill("None",theWeight);
     h_weightsSquared->Fill("None",pow(theWeight,2));
 
-    h_weights_LUMCorrected->Fill("None",weightMap->at("PU_BCDEFGHI_nominal"));
-    h_weightsSquared_LUMCorrected->Fill("None",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+    h_weights_LUMCorrected->Fill("None",weightMap->at("correctedNominal"));
+    h_weightsSquared_LUMCorrected->Fill("None",pow(weightMap->at("correctedNominal"),2));
   }
   else{
     genWeight = 1;
@@ -439,8 +437,8 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     h_weightsSquared->Fill("Trigger",pow(theWeight,2));
 
     if(isMC){
-      h_weights_LUMCorrected->Fill("Trigger",weightMap->at("PU_BCDEFGHI_nominal"));
-      h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+      h_weights_LUMCorrected->Fill("Trigger",weightMap->at("correctedNominal"));
+      h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("correctedNominal"),2));
     }
   }
 
@@ -493,8 +491,8 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     h_weightsSquared->Fill("nJets",pow(theWeight,2));
 
     if(isMC){
-      h_weights_LUMCorrected->Fill("nJets",weightMap->at("PU_BCDEFGHI_nominal"));
-      h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("PU_BCDEFGHI_nominal"),2));
+      h_weights_LUMCorrected->Fill("nJets",weightMap->at("correctedNominal"));
+      h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("correctedNominal"),2));
     }
   }
   if(isScouting){
