@@ -55,7 +55,7 @@
 // class declaration
 //
 
-class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources> {
+class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources, edm::one::WatchRuns> {
    public:
       explicit TriggerFilter(const edm::ParameterSet&);
       ~TriggerFilter();
@@ -67,8 +67,9 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources> {
       virtual bool filter(edm::Event&, const edm::EventSetup&) override;
       virtual void endJob() ;
       
-      virtual bool beginRun(edm::Run&, edm::EventSetup const&);
-      virtual bool endRun(edm::Run&, edm::EventSetup const&);
+      //virtual bool beginRun(edm::Run&, edm::EventSetup const&);
+      void beginRun(edm::Run const&, edm::EventSetup const&) override;
+      void endRun(edm::Run const&, edm::EventSetup const&) override;
       virtual bool beginLuminosityBlock(edm::LuminosityBlock&, edm::EventSetup const&);
       virtual bool endLuminosityBlock(edm::LuminosityBlock&, edm::EventSetup const&);
   
@@ -130,17 +131,20 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources> {
 
     for (size_t pf_index = 0; pf_index < scoutingParticleH->size(); pf_index++) {
       auto & scoutingPFCandidate = scoutingParticleH->at(pf_index);
-
+      if (abs(scoutingPFCandidate.pdgId()) != 13){
+	continue;
+      }
       float pf_eta = scoutingPFCandidate.eta();
       float pf_phi = scoutingPFCandidate.phi();
-
+      
       dEta = mu_eta - pf_eta;
       dPhi = deltaPhi(mu_phi, pf_phi);
       dR = sqrt(pow(dEta, 2) + pow(dPhi, 2));
-
-      if(abs(scoutingPFCandidate.pdgId()) == 13 && dR < tolerance){
-            matches = true;
-        }
+      
+      if(dR < tolerance){
+	matches = true;
+	return matches;
+      }
     }
     return matches;
   }
@@ -184,7 +188,7 @@ TriggerFilter::TriggerFilter(const edm::ParameterSet& iConfig):
   extInputTag_ = iConfig.getParameter<edm::InputTag>("l1tExtBlkInputTag");
   algToken_ = consumes<BXVector<GlobalAlgBlk>>(algInputTag_);
   l1Seeds_ = iConfig.getParameter<std::vector<std::string> >("l1Seeds");
-  l1GtUtils_ = std::make_unique<l1t::L1TGlobalUtil>(iConfig, consumesCollector(), *this, algInputTag_, extInputTag_, l1t::UseEventSetupIn::Event);
+  l1GtUtils_ = std::make_unique<l1t::L1TGlobalUtil>(iConfig, consumesCollector(), *this, algInputTag_, extInputTag_, l1t::UseEventSetupIn::RunAndEvent);
   if(isScouting){
     produces<std::vector<reco::PFJet>>("pfjets");
   }
@@ -293,8 +297,6 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   bool isPFMuon;
 
   for (auto muons_iter = muonsH->begin(); muons_iter != muonsH->end(); ++muons_iter) {
-    isPFMuon = matchesPF(13, 0.1, *muons_iter, scoutingParticle_collection_handle);
-
     if (muons_iter->pt() > 20 &&
         abs(muons_iter->eta()) < 2.4 &&
         muons_iter->normalizedChi2() < 10 &&
@@ -302,10 +304,12 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
         muons_iter->nValidPixelHits() > 0 &&
         muons_iter->nValidRecoMuonHits() > 0 &&
         muons_iter->nRecoMuonMatchedStations() > 1 &&
-        muons_iter->trackIso() < 0.1 &&
-        isPFMuon == true) 
+        muons_iter->trackIso() < 0.1) 
     {
-      selectedMuons.push_back(&(*muons_iter));
+      isPFMuon = matchesPF(13, 0.1, *muons_iter, scoutingParticle_collection_handle);
+      if (isPFMuon){
+	selectedMuons.push_back(&(*muons_iter));
+      }
     }
   }
 
@@ -316,7 +320,7 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   float dPhi_jet_mu;
   float dR_jet_mu;
 
-  for (auto jet: *pfJetVector) {
+  for (const auto& jet: *pfJetVector) {
     if((jet.pt() > 30) && (abs(jet.eta()) < 2.4)){    
       for (auto muon : selectedMuons) {
         dEta_jet_mu = jet.eta() - muon->eta();
@@ -405,7 +409,7 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   
   bool passTrigger;
   if(isScouting){
-    l1GtUtils_->retrieveL1(iEvent,iSetup,algToken_);
+    l1GtUtils_->retrieveL1Event(iEvent,iSetup,algToken_);
     bool L1_HTT280er;
     bool L1_ETT2000;
     bool L1_SingleJet180;
@@ -590,17 +594,19 @@ TriggerFilter::endJob() {
 }
 
 // ------------ method called when starting to processes a run  ------------
-bool 
-TriggerFilter::beginRun(edm::Run&, edm::EventSetup const&)
-{ 
-  return true;
+void 
+TriggerFilter::beginRun(edm::Run const& iRun, edm::EventSetup const& iSetup)
+{
+  
+  l1GtUtils_->retrieveL1Setup(iSetup);
+  
 }
 
 // ------------ method called when ending the processing of a run  ------------
-bool 
-TriggerFilter::endRun(edm::Run&, edm::EventSetup const&)
+void 
+TriggerFilter::endRun(edm::Run const&, edm::EventSetup const&)
 {
-  return true;
+  
 }
 
 // ------------ method called when starting to processes a luminosity block  ------------
