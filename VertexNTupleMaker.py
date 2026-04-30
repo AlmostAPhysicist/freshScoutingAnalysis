@@ -44,7 +44,7 @@ options.register('PUFile',
     )
 
 options.register('UncertaintyCorrectionFile',
-                 'ratio_uncertaintyCorrections.npz',
+                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/ratio_uncertaintyCorrections_v28.npz',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Name of track uncertainty correction file to use"
@@ -52,25 +52,25 @@ options.register('UncertaintyCorrectionFile',
 
 ## Trigger corrections to use
 options.register('TriggerCorrectionsNominal',
-                 'TriggerCorrections/weights_trigger_2024_nominal.npy',
+                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/TriggerCorrections/weights_trigger_2024_nominal.npy',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Nominal value of the trigger efficiency corrections"
     )
 options.register('TriggerCorrectionsUp',
-                 'TriggerCorrections/weights_trigger_2024_up.npy',
+                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/TriggerCorrections/weights_trigger_2024_up.npy',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Upper bound of the trigger efficiency corrections"
     )
 options.register('TriggerCorrectionsDown',
-                 'TriggerCorrections/weights_trigger_2024_down.npy',
+                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/TriggerCorrections/weights_trigger_2024_down.npy',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Lower bound of the trigger efficiency corrections"
     )
 options.register('TriggerCorrectionsBinEdge',
-                 'TriggerCorrections/weights_trigger_2024_xedge.npy',
+                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/TriggerCorrections/weights_trigger_2024_xedge.npy',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Upper bin edges in HT of the trigger corrections"
@@ -271,13 +271,13 @@ process.hltScoutingUnpackProducer = cms.EDProducer('HLTScoutingUnpackProducer',
                                                    producePFCHSCandidate = cms.bool(False),
                                                    mightGet = cms.optional.untracked.vstring,
                                                    isMC = cms.bool(options.isMC),
-                                                   doUncCorrection = cms.bool(False),
-                                                   dxyErrCorrBarrel = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dxyErr_barrel"].tolist()),
-                                                   dxyErrCorrDisk   = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dxyErr_disk"].tolist()),
-                                                   dzErrCorrBarrel  = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzErr_barrel"].tolist()),
-                                                   dzErrCorrDisk    = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzErr_disk"].tolist()),
-                                                   covCorrBarrel    = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzdxyCov_barrel"].tolist()),
-                                                   covCorrDisk      = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzdxyCov_disk"].tolist()),
+                                                   doUncCorrection = cms.bool(True),
+                                                   dxyErrCorrBarrel = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dxyErr_barrel_jetMatched"].tolist()),
+                                                   dxyErrCorrDisk   = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dxyErr_disk_jetMatched"].tolist()),
+                                                   dzErrCorrBarrel  = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzErr_barrel_jetMatched"].tolist()),
+                                                   dzErrCorrDisk    = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzErr_disk_jetMatched"].tolist()),
+                                                   covCorrBarrel    = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzdxyCov_barrel_jetMatched"].tolist()),
+                                                   covCorrDisk      = cms.vdouble(*UncertaintyCorrectionData["ratio_correction_dzdxyCov_disk_jetMatched"].tolist()),
                                                    )
 
 
@@ -313,6 +313,7 @@ process.Vertexer = cms.EDProducer('Vertexer',
                                   PUCorrectionArray = cms.vdouble(*PUCorrectionData.flatten().tolist()),
                                   isMC = cms.bool(options.isMC),
                                   seed_tracks_src = cms.InputTag('hltScoutingUnpackProducer', 'Track'),
+                                  pfjets = skimPFJetsTag,
                                   pt_min_cut = cms.double(1.0),
                                   dxySig_min_cut = cms.double(3.0),
                                   dxySig_max_cut = cms.double(4.0), #dxySig between 2.5 and 4.0 for a control region, dxySig>4 with no max for signal region

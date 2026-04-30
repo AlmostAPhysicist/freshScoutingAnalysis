@@ -259,6 +259,7 @@ private:
   std::vector<float>* scoutTrack_dszdxyCovariance;
   std::vector<float>* scoutTrack_vx;
   std::vector<float>* scoutTrack_vy;
+  std::vector<int>* scoutTrack_iJet;
   std::vector<int>* scoutTrack_nValidPixelHits;
   std::vector<int>* scoutTrack_nTrackerLayersWithMeasurement;
   std::vector<int>* scoutTrack_nValidStripHits;
@@ -737,6 +738,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   scoutTrack_dszdxyCovariance->clear();
   scoutTrack_vx->clear();
   scoutTrack_vy->clear();
+  scoutTrack_iJet->clear();
   scoutTrack_nValidPixelHits->clear();
   scoutTrack_nTrackerLayersWithMeasurement->clear();
   scoutTrack_nValidStripHits->clear();
@@ -999,69 +1001,6 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   auto const &tt_builder = iSetup.getData(token_builder);
   std::vector<reco::Track>::const_iterator scoutingTrackIter;
   //std::vector<Run3ScoutingTrack>::const_iterator scoutingTrackIter;
-  uint i_tk = 0;
-  if(fillScoutTrack){
-    for(scoutingTrackIter = ScoutingTrackHandle->begin(); scoutingTrackIter != ScoutingTrackHandle->end(); ++scoutingTrackIter){
-      scoutTrack_pt->push_back(scoutingTrackIter->pt());
-      scoutTrack_eta->push_back(scoutingTrackIter->eta());
-      scoutTrack_phi->push_back(scoutingTrackIter->phi());
-      scoutTrack_phiBeamspot->push_back(atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0()));
-      //std::cout<<"track phi: "<<scoutingTrackIter->phi()<<std::endl;
-      //std::cout<<"recalc origin phi: "<<atan2(scoutingTrackIter->py(),scoutingTrackIter->px())<<std::endl;
-      //std::cout<<"recalc beamspot phi: "<<atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0())<<std::endl;
-      scoutTrack_reducedChi2->push_back(scoutingTrackIter->chi2()/scoutingTrackIter->ndof());
-      scoutTrack_charge->push_back(scoutingTrackIter->charge());
-      reco::TransientTrack transientScoutTrack = tt_builder.build(*scoutingTrackIter);
-      std::pair<bool, Measurement1D> ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, fake_bs_vtx);
-      std::pair<bool, Measurement1D> ttk_3DDist = IPTools::absoluteImpactParameter3D(transientScoutTrack, fake_bs_vtx);
-      scoutTrack_dxy->push_back(ttk_transverseDist.second.value());
-      scoutTrack_dxyErr->push_back(ttk_transverseDist.second.error());
-      scoutTrack_dxySig->push_back(ttk_transverseDist.second.significance());
-      GlobalVector dir(scoutingTrackIter->px(), scoutingTrackIter->py(), scoutingTrackIter->pz());
-      std::pair<bool, Measurement1D> ttk_transverseDistSigned = IPTools::signedTransverseImpactParameter(transientScoutTrack, dir, fake_bs_vtx);
-      scoutTrack_dxySigned->push_back(ttk_transverseDistSigned.second.value());
-      scoutTrack_d3D->push_back(ttk_3DDist.second.value());
-      scoutTrack_d3DErr->push_back(ttk_3DDist.second.error());
-      scoutTrack_d3DSig->push_back(ttk_3DDist.second.significance());
-      //Note: This is a linear approximation that breaks down in reference point of track is far from beamspot. Significance doesn't consider beamspot error in z.
-      float dz = scoutingTrackIter->dz(beamspot->position());
-      scoutTrack_dz->push_back(dz);
-      scoutTrack_dzErr->push_back(scoutingTrackIter->dzError());
-      scoutTrack_dzSig->push_back(dz/scoutingTrackIter->dzError());
-      scoutTrack_dszUncertainty->push_back(scoutingTrackIter->dszError());
-      scoutTrack_dxyUncertainty->push_back(scoutingTrackIter->dxyError());
-      scoutTrack_dszdxyCovariance->push_back(scoutingTrackIter->covariance(3,4));
-      scoutTrack_vx->push_back(scoutingTrackIter->vx());
-      scoutTrack_vy->push_back(scoutingTrackIter->vy());
-      edm::Ref<std::vector<reco::Track>> trackRef(ScoutingTrackHandle, i_tk);
-      if(isScouting){
-	auto scoutTrack = (*ScoutingTrackRefHandle)[trackRef];
-	scoutTrack_nValidPixelHits->push_back(scoutTrack->tk_nValidPixelHits());
-	scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutTrack->tk_nTrackerLayersWithMeasurement());
-	scoutTrack_nValidStripHits->push_back(scoutTrack->tk_nValidStripHits());
-      }
-      else{
-	scoutTrack_nValidPixelHits->push_back(scoutingTrackIter->hitPattern().numberOfValidPixelHits());
-	scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutingTrackIter->hitPattern().trackerLayersWithMeasurement());
-	scoutTrack_nValidStripHits->push_back(scoutingTrackIter->hitPattern().numberOfValidStripHits());
-      }
-      //scoutTrack_nMissingInnerHits->push_back(scoutingTrackIter->missingInnerHits());
-    
-      float minPVDxy = 999999;
-      float minPVDz = 999999;
-      /*
-      for(primaryVertexIter = primaryVertices->begin(); primaryVertexIter != primaryVertices->end(); ++primaryVertexIter){
-	ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, *primaryVertexIter);
-	if(ttk_transverseDist.second.value()<minPVDxy) minPVDxy = ttk_transverseDist.second.value();
-	dz = scoutingTrackIter->dz(primaryVertexIter->position());
-	if(fabs(dz)<fabs(minPVDz)) minPVDz = dz;
-      }
-      scoutTrack_minPVDxy->push_back(minPVDxy);
-      scoutTrack_minPVDz->push_back(minPVDz);
-      */
-      i_tk++;
-    }
-  }
 
   nGenJets = 0;
   genHT = 0;
@@ -1246,7 +1185,84 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     }
   }
 
+  uint i_tk = 0;
+  if(fillScoutTrack){
+    for(scoutingTrackIter = ScoutingTrackHandle->begin(); scoutingTrackIter != ScoutingTrackHandle->end(); ++scoutingTrackIter){
+      scoutTrack_pt->push_back(scoutingTrackIter->pt());
+      scoutTrack_eta->push_back(scoutingTrackIter->eta());
+      scoutTrack_phi->push_back(scoutingTrackIter->phi());
+      scoutTrack_phiBeamspot->push_back(atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0()));
+      //std::cout<<"track phi: "<<scoutingTrackIter->phi()<<std::endl;
+      //std::cout<<"recalc origin phi: "<<atan2(scoutingTrackIter->py(),scoutingTrackIter->px())<<std::endl;
+      //std::cout<<"recalc beamspot phi: "<<atan2(scoutingTrackIter->py()-beamspot->y0(),scoutingTrackIter->px()-beamspot->x0())<<std::endl;
+      scoutTrack_reducedChi2->push_back(scoutingTrackIter->chi2()/scoutingTrackIter->ndof());
+      scoutTrack_charge->push_back(scoutingTrackIter->charge());
+      reco::TransientTrack transientScoutTrack = tt_builder.build(*scoutingTrackIter);
+      std::pair<bool, Measurement1D> ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, fake_bs_vtx);
+      std::pair<bool, Measurement1D> ttk_3DDist = IPTools::absoluteImpactParameter3D(transientScoutTrack, fake_bs_vtx);
+      scoutTrack_dxy->push_back(ttk_transverseDist.second.value());
+      scoutTrack_dxyErr->push_back(ttk_transverseDist.second.error());
+      scoutTrack_dxySig->push_back(ttk_transverseDist.second.significance());
+      GlobalVector dir(scoutingTrackIter->px(), scoutingTrackIter->py(), scoutingTrackIter->pz());
+      std::pair<bool, Measurement1D> ttk_transverseDistSigned = IPTools::signedTransverseImpactParameter(transientScoutTrack, dir, fake_bs_vtx);
+      scoutTrack_dxySigned->push_back(ttk_transverseDistSigned.second.value());
+      scoutTrack_d3D->push_back(ttk_3DDist.second.value());
+      scoutTrack_d3DErr->push_back(ttk_3DDist.second.error());
+      scoutTrack_d3DSig->push_back(ttk_3DDist.second.significance());
+      //Note: This is a linear approximation that breaks down in reference point of track is far from beamspot. Significance doesn't consider beamspot error in z.
+      float dz = scoutingTrackIter->dz(beamspot->position());
+      scoutTrack_dz->push_back(dz);
+      scoutTrack_dzErr->push_back(scoutingTrackIter->dzError());
+      scoutTrack_dzSig->push_back(dz/scoutingTrackIter->dzError());
+      scoutTrack_dszUncertainty->push_back(scoutingTrackIter->dszError());
+      scoutTrack_dxyUncertainty->push_back(scoutingTrackIter->dxyError());
+      scoutTrack_dszdxyCovariance->push_back(scoutingTrackIter->covariance(3,4));
+      scoutTrack_vx->push_back(scoutingTrackIter->vx());
+      scoutTrack_vy->push_back(scoutingTrackIter->vy());
 
+      int i_jet = 0;
+      int i_bestMatch = -1;
+      float bestDeltaR = 9999999;
+      for (auto jet: pfJetVector) {
+	float deltaR = reco::deltaR(scoutingTrackIter->eta(),scoutingTrackIter->phi(),jet.eta(),jet.phi());
+	if((deltaR<bestDeltaR) && (deltaR<0.4)){
+	  i_bestMatch = i_jet;
+	  bestDeltaR = deltaR;
+	}
+	i_jet++;
+      }
+      scoutTrack_iJet->push_back(i_bestMatch);
+      
+      
+      edm::Ref<std::vector<reco::Track>> trackRef(ScoutingTrackHandle, i_tk);
+      if(isScouting){
+	auto scoutTrack = (*ScoutingTrackRefHandle)[trackRef];
+	scoutTrack_nValidPixelHits->push_back(scoutTrack->tk_nValidPixelHits());
+	scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutTrack->tk_nTrackerLayersWithMeasurement());
+	scoutTrack_nValidStripHits->push_back(scoutTrack->tk_nValidStripHits());
+      }
+      else{
+	scoutTrack_nValidPixelHits->push_back(scoutingTrackIter->hitPattern().numberOfValidPixelHits());
+	scoutTrack_nTrackerLayersWithMeasurement->push_back(scoutingTrackIter->hitPattern().trackerLayersWithMeasurement());
+	scoutTrack_nValidStripHits->push_back(scoutingTrackIter->hitPattern().numberOfValidStripHits());
+      }
+      //scoutTrack_nMissingInnerHits->push_back(scoutingTrackIter->missingInnerHits());
+    
+      float minPVDxy = 999999;
+      float minPVDz = 999999;
+      /*
+      for(primaryVertexIter = primaryVertices->begin(); primaryVertexIter != primaryVertices->end(); ++primaryVertexIter){
+	ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, *primaryVertexIter);
+	if(ttk_transverseDist.second.value()<minPVDxy) minPVDxy = ttk_transverseDist.second.value();
+	dz = scoutingTrackIter->dz(primaryVertexIter->position());
+	if(fabs(dz)<fabs(minPVDz)) minPVDz = dz;
+      }
+      scoutTrack_minPVDxy->push_back(minPVDxy);
+      scoutTrack_minPVDz->push_back(minPVDz);
+      */
+      i_tk++;
+    }
+  }
   
   //Get the vertices
   Handle<vector<Vertex> > verticesH;
@@ -1952,6 +1968,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     scoutTrack_dszdxyCovariance = new std::vector<float>;
     scoutTrack_vx = new std::vector<float>;
     scoutTrack_vy = new std::vector<float>;
+    scoutTrack_iJet = new std::vector<int>;
     scoutTrack_nValidPixelHits = new std::vector<int>;
     scoutTrack_nTrackerLayersWithMeasurement = new std::vector<int>;
     scoutTrack_nValidStripHits = new std::vector<int>;
@@ -2117,6 +2134,7 @@ void ScoutingTreeMakerRun3::beginJob() {
     objectTree->Branch("scoutTrack_dszdxyCovariance",&scoutTrack_dszdxyCovariance);
     objectTree->Branch("scoutTrack_vx",&scoutTrack_vx);
     objectTree->Branch("scoutTrack_vy",&scoutTrack_vy);
+    objectTree->Branch("scoutTrack_iJet",&scoutTrack_iJet);
     objectTree->Branch("scoutTrack_nValidPixelHits",&scoutTrack_nValidPixelHits);
     objectTree->Branch("scoutTrack_nTrackerLayersWithMeasurement",&scoutTrack_nTrackerLayersWithMeasurement);
     objectTree->Branch("scoutTrack_nValidStripHits",&scoutTrack_nValidStripHits);
@@ -2417,6 +2435,7 @@ void ScoutingTreeMakerRun3::endJob() {
   delete scoutTrack_dszdxyCovariance;
   delete scoutTrack_vx;
   delete scoutTrack_vy;
+  delete scoutTrack_iJet;
   delete scoutTrack_nValidPixelHits;
   delete scoutTrack_nTrackerLayersWithMeasurement;
   delete scoutTrack_nValidStripHits;

@@ -44,7 +44,8 @@
 #include "DataFormats/TrackReco/interface/TrackFwd.h"
 #include "DataFormats/VertexReco/interface/Vertex.h"
 #include "DataFormats/VertexReco/interface/VertexFwd.h"
-
+#include "DataFormats/JetReco/interface/PFJet.h"
+#include "DataFormats/PatCandidates/interface/Jet.h"
 //Scouting data formats
 #include "DataFormats/Scouting/interface/Run3ScoutingElectron.h"
 #include "DataFormats/Scouting/interface/Run3ScoutingPhoton.h"
@@ -114,6 +115,24 @@ private:
   TH1D* h_dszdxyCov_weighted_sq_sum_disk;
   TH1D* h_weight_sum_disk;
   TH1D* h_weight_sq_sum_disk;
+
+  TH1D* h_dxyErr_weighted_sum_barrel_jetMatched;
+  TH1D* h_dszErr_weighted_sum_barrel_jetMatched;
+  TH1D* h_dszdxyCov_weighted_sum_barrel_jetMatched;
+  TH1D* h_dxyErr_weighted_sq_sum_barrel_jetMatched;
+  TH1D* h_dszErr_weighted_sq_sum_barrel_jetMatched;
+  TH1D* h_dszdxyCov_weighted_sq_sum_barrel_jetMatched;
+  TH1D* h_weight_sum_barrel_jetMatched;
+  TH1D* h_weight_sq_sum_barrel_jetMatched;
+
+  TH1D* h_dxyErr_weighted_sum_disk_jetMatched;
+  TH1D* h_dszErr_weighted_sum_disk_jetMatched;
+  TH1D* h_dszdxyCov_weighted_sum_disk_jetMatched;
+  TH1D* h_dxyErr_weighted_sq_sum_disk_jetMatched;
+  TH1D* h_dszErr_weighted_sq_sum_disk_jetMatched;
+  TH1D* h_dszdxyCov_weighted_sq_sum_disk_jetMatched;
+  TH1D* h_weight_sum_disk_jetMatched;
+  TH1D* h_weight_sq_sum_disk_jetMatched;
   
   const double pt_min_cut;
   const double dxySig_min_cut;
@@ -143,6 +162,7 @@ private:
   const edm::ESGetToken<BeamSpotOnlineObjects, BeamSpotOnlineHLTObjectsRcd> bsOnlineToken_;
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_token;
   const edm::EDGetTokenT<std::vector<reco::Track>> seed_tracks_token_;
+  const edm::EDGetTokenT<std::vector<reco::PFJet> >  pfjetsToken_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> token_builder;
   const edm::EDGetTokenT<std::map<std::string, float>> weightsToken_;
   
@@ -274,6 +294,7 @@ Vertexer::Vertexer(edm::ParameterSet const& params)
   bsOnlineToken_(esConsumes<BeamSpotOnlineObjects, BeamSpotOnlineHLTObjectsRcd>()),
   beamspot_token(consumes<reco::BeamSpot>(params.getParameter<edm::InputTag>("beamspot_src"))),
   seed_tracks_token_(consumes(params.getParameter<edm::InputTag>("seed_tracks_src"))),
+  pfjetsToken_(consumes<std::vector<reco::PFJet>>(params.getParameter<edm::InputTag>("pfjets"))),
   token_builder(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
   weightsToken_(consumes<std::map<std::string, float>>(edm::InputTag("triggerFilter", "weightMap"))),
   putToken_{produces()} {
@@ -357,6 +378,17 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     iEvent.getByToken(weightsToken_, weightMap);
     weight = weightMap->at("correctedNominal");
   }
+
+  //Get jets for matching to tracks
+  Handle<std::vector<reco::PFJet> > pfjetsH;
+  iEvent.getByToken(pfjetsToken_, pfjetsH);
+  std::vector<reco::PFJet> pfJetVector;
+
+  if(pfjetsH.isValid()){
+    for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
+      pfJetVector.push_back(*jets_iter);
+    }
+  }
   
   //Get the Transient Track Builder
   auto const &tt_builder = iSetup.getData(token_builder);
@@ -397,11 +429,46 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
 	h_weight_sum_disk->Fill(tk_ref->pt(),weight);
 	h_weight_sq_sum_disk->Fill(tk_ref->pt(),pow(weight,2));
       }
+
+      int i_jet = 0;
+      int i_bestMatch = -1;
+      float bestDeltaR = 9999999;
+      for (auto jet: pfJetVector) {
+	float deltaR = reco::deltaR(tk_ref->eta(),tk_ref->phi(),jet.eta(),jet.phi());
+	if((deltaR<bestDeltaR) && (deltaR<0.4)){
+	  i_bestMatch = i_jet;
+	  bestDeltaR = deltaR;
+	}
+	i_jet++;
+      }
+
+      if(i_bestMatch!=-1){
+	if(fabs(tk_ref->eta())<1.5){
+	  h_dxyErr_weighted_sum_barrel_jetMatched->Fill(tk_ref->pt(),weight*tk_ref->dxyError());
+	  h_dszErr_weighted_sum_barrel_jetMatched->Fill(tk_ref->pt(),weight*tk_ref->dszError());
+	  h_dszdxyCov_weighted_sum_barrel_jetMatched->Fill(tk_ref->pt(),weight*fabs(tk_ref->covariance(3,4)));
+	  h_dxyErr_weighted_sq_sum_barrel_jetMatched->Fill(tk_ref->pt(),weight*pow(tk_ref->dxyError(),2));
+	  h_dszErr_weighted_sq_sum_barrel_jetMatched->Fill(tk_ref->pt(),weight*pow(tk_ref->dszError(),2));
+	  h_dszdxyCov_weighted_sq_sum_barrel_jetMatched->Fill(tk_ref->pt(),weight*pow(tk_ref->covariance(3,4),2));
+	  h_weight_sum_barrel_jetMatched->Fill(tk_ref->pt(),weight);
+	  h_weight_sq_sum_barrel_jetMatched->Fill(tk_ref->pt(),pow(weight,2));
+	}
+	else{
+	  h_dxyErr_weighted_sum_disk_jetMatched->Fill(tk_ref->pt(),weight*tk_ref->dxyError());
+	  h_dszErr_weighted_sum_disk_jetMatched->Fill(tk_ref->pt(),weight*tk_ref->dszError());
+	  h_dszdxyCov_weighted_sum_disk_jetMatched->Fill(tk_ref->pt(),weight*fabs(tk_ref->covariance(3,4)));
+	  h_dxyErr_weighted_sq_sum_disk_jetMatched->Fill(tk_ref->pt(),weight*pow(tk_ref->dxyError(),2));
+	  h_dszErr_weighted_sq_sum_disk_jetMatched->Fill(tk_ref->pt(),weight*pow(tk_ref->dszError(),2));
+	  h_dszdxyCov_weighted_sq_sum_disk_jetMatched->Fill(tk_ref->pt(),weight*pow(tk_ref->covariance(3,4),2));
+	  h_weight_sum_disk_jetMatched->Fill(tk_ref->pt(),weight);
+	  h_weight_sq_sum_disk_jetMatched->Fill(tk_ref->pt(),pow(weight,2));
+	}
       
-      if((((dxySig_max_cut>0) && (IP_sig < dxySig_max_cut)) || (dxySig_max_cut<=0)) && (IP_sig > dxySig_min_cut)){
-	//if(IP_sig > 2){
-	seed_track_refs.push_back(tk_ref);
-	seed_track_index_map[tk_ref] = i_tk;
+	if((((dxySig_max_cut>0) && (IP_sig < dxySig_max_cut)) || (dxySig_max_cut<=0)) && (IP_sig > dxySig_min_cut)){
+	  //if(IP_sig > 2){
+	  seed_track_refs.push_back(tk_ref);
+	  seed_track_index_map[tk_ref] = i_tk;
+	}
       }
     }
     //if ((IP_sig > 4) && (tk_ref->pt()>0.9)) seed_track_refs.push_back(tk_ref);
@@ -435,7 +502,7 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
   auto outMap3D = std::make_unique<edm::ValueMap<std::pair<float,float>>>();
   edm::ValueMap<std::pair<float,float>>::Filler filler3D(*outMap3D);
   
-  if (ntk == 0) {
+  if (ntk<3) {
     iEvent.emplace(putToken_, std::move(*vertices));
     fillerZ.insert(seed_track_handle, shiftZVec.begin(), shiftZVec.end());
     fillerZ.fill();
@@ -446,7 +513,6 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     return;
   }  
 
-  
   std::vector<size_t> itks(n_tracks_per_seed_vertex, 0);
 
   auto try_seed_vertex = [&]() {
@@ -698,8 +764,9 @@ void Vertexer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
       v[0] = vertices->begin() - 1;  // -1 because about to ++sv
       ++n_resets;
       
-      //if (n_resets == 3000)
-      //  throw "I'm dumb";
+      //if (n_resets == 3000){
+      //std::cout<<"I'm dumb"<<std::endl;
+      //}
     }
   }
 
@@ -963,6 +1030,24 @@ void Vertexer::beginStream(edm::StreamID) {
   h_dszdxyCov_weighted_sq_sum_disk = fs->make<TH1D>("dszdxyCov_weighted_sq_sum_disk",";Track p_{T}; Weighted Sum",200,0,200);
   h_weight_sum_disk = fs->make<TH1D>("weight_sum_disk",";Track p_{T}; Weight Sum",200,0,200);
   h_weight_sq_sum_disk = fs->make<TH1D>("weight_sq_sum_disk",";Track p_{T}; Weight Squared Sum",200,0,200);
+
+  h_dxyErr_weighted_sum_barrel_jetMatched = fs->make<TH1D>("dxyErr_weighted_sum_barrel_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszErr_weighted_sum_barrel_jetMatched = fs->make<TH1D>("dszErr_weighted_sum_barrel_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszdxyCov_weighted_sum_barrel_jetMatched = fs->make<TH1D>("dszdxyCov_weighted_sum_barrel_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dxyErr_weighted_sq_sum_barrel_jetMatched = fs->make<TH1D>("dxyErr_weighted_sq_sum_barrel_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszErr_weighted_sq_sum_barrel_jetMatched = fs->make<TH1D>("dszErr_weighted_sq_sum_barrel_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszdxyCov_weighted_sq_sum_barrel_jetMatched = fs->make<TH1D>("dszdxyCov_weighted_sq_sum_barrel_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_weight_sum_barrel_jetMatched = fs->make<TH1D>("weight_sum_barrel_jetMatched",";Track p_{T}; Weight Sum",200,0,200);
+  h_weight_sq_sum_barrel_jetMatched = fs->make<TH1D>("weight_sq_sum_barrel_jetMatched",";Track p_{T}; Weight Squared Sum",200,0,200);
+
+  h_dxyErr_weighted_sum_disk_jetMatched = fs->make<TH1D>("dxyErr_weighted_sum_disk_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszErr_weighted_sum_disk_jetMatched = fs->make<TH1D>("dszErr_weighted_sum_disk_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszdxyCov_weighted_sum_disk_jetMatched = fs->make<TH1D>("dszdxyCov_weighted_sum_disk_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dxyErr_weighted_sq_sum_disk_jetMatched = fs->make<TH1D>("dxyErr_weighted_sq_sum_disk_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszErr_weighted_sq_sum_disk_jetMatched = fs->make<TH1D>("dszErr_weighted_sq_sum_disk_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_dszdxyCov_weighted_sq_sum_disk_jetMatched = fs->make<TH1D>("dszdxyCov_weighted_sq_sum_disk_jetMatched",";Track p_{T}; Weighted Sum",200,0,200);
+  h_weight_sum_disk_jetMatched = fs->make<TH1D>("weight_sum_disk_jetMatched",";Track p_{T}; Weight Sum",200,0,200);
+  h_weight_sq_sum_disk_jetMatched = fs->make<TH1D>("weight_sq_sum_disk_jetMatched",";Track p_{T}; Weight Squared Sum",200,0,200);
 }
 
 // ------------ method called once each stream after processing all runs, lumis and events  ------------
@@ -1015,6 +1100,56 @@ void Vertexer::endStream() {
   
   h_weight_sq_sum_disk->Draw();
   h_weight_sq_sum_disk->Write();
+
+  //jet matched histograms
+
+  h_dxyErr_weighted_sum_barrel_jetMatched->Draw();
+  h_dxyErr_weighted_sum_barrel_jetMatched->Write();
+  
+  h_dszErr_weighted_sum_barrel_jetMatched->Draw();
+  h_dszErr_weighted_sum_barrel_jetMatched->Write();
+  
+  h_dszdxyCov_weighted_sum_barrel_jetMatched->Draw();
+  h_dszdxyCov_weighted_sum_barrel_jetMatched->Write();
+
+  h_dxyErr_weighted_sq_sum_barrel_jetMatched->Draw();
+  h_dxyErr_weighted_sq_sum_barrel_jetMatched->Write();
+  
+  h_dszErr_weighted_sq_sum_barrel_jetMatched->Draw();
+  h_dszErr_weighted_sq_sum_barrel_jetMatched->Write();
+  
+  h_dszdxyCov_weighted_sq_sum_barrel_jetMatched->Draw();
+  h_dszdxyCov_weighted_sq_sum_barrel_jetMatched->Write();
+  
+  h_weight_sum_barrel_jetMatched->Draw();
+  h_weight_sum_barrel_jetMatched->Write();
+  
+  h_weight_sq_sum_barrel_jetMatched->Draw();
+  h_weight_sq_sum_barrel_jetMatched->Write();
+
+  h_dxyErr_weighted_sum_disk_jetMatched->Draw();
+  h_dxyErr_weighted_sum_disk_jetMatched->Write();
+  
+  h_dszErr_weighted_sum_disk_jetMatched->Draw();
+  h_dszErr_weighted_sum_disk_jetMatched->Write();
+  
+  h_dszdxyCov_weighted_sum_disk_jetMatched->Draw();
+  h_dszdxyCov_weighted_sum_disk_jetMatched->Write();
+
+  h_dxyErr_weighted_sq_sum_disk_jetMatched->Draw();
+  h_dxyErr_weighted_sq_sum_disk_jetMatched->Write();
+  
+  h_dszErr_weighted_sq_sum_disk_jetMatched->Draw();
+  h_dszErr_weighted_sq_sum_disk_jetMatched->Write();
+  
+  h_dszdxyCov_weighted_sq_sum_disk_jetMatched->Draw();
+  h_dszdxyCov_weighted_sq_sum_disk_jetMatched->Write();
+  
+  h_weight_sum_disk_jetMatched->Draw();
+  h_weight_sum_disk_jetMatched->Write();
+  
+  h_weight_sq_sum_disk_jetMatched->Draw();
+  h_weight_sq_sum_disk_jetMatched->Write();
 }
 
 // ------------ method called when starting to processes a run  ------------
