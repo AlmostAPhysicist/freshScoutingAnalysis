@@ -44,7 +44,7 @@ options.register('PUFile',
     )
 
 options.register('UncertaintyCorrectionFile',
-                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/ratio_uncertaintyCorrections_v28.npz',
+                 'ratio_uncertaintyCorrections_v28.npz',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Name of track uncertainty correction file to use"
@@ -52,25 +52,25 @@ options.register('UncertaintyCorrectionFile',
 
 ## Trigger corrections to use
 options.register('TriggerCorrectionsNominal',
-                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/TriggerCorrections/weights_trigger_2024_nominal.npy',
+                 'TriggerCorrections/weights_trigger_2024_nominal.npy',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Nominal value of the trigger efficiency corrections"
     )
 options.register('TriggerCorrectionsUp',
-                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/TriggerCorrections/weights_trigger_2024_up.npy',
+                 'TriggerCorrections/weights_trigger_2024_up.npy',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Upper bound of the trigger efficiency corrections"
     )
 options.register('TriggerCorrectionsDown',
-                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/TriggerCorrections/weights_trigger_2024_down.npy',
+                 'TriggerCorrections/weights_trigger_2024_down.npy',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Lower bound of the trigger efficiency corrections"
     )
 options.register('TriggerCorrectionsBinEdge',
-                 '/afs/cern.ch/user/r/rmccarth/private/scouting/CMSSW_14_0_18_patch1/src/Run3ScoutingAnalysisTools/TriggerCorrections/weights_trigger_2024_xedge.npy',
+                 'TriggerCorrections/weights_trigger_2024_xedge.npy',
                  VarParsing.VarParsing.multiplicity.singleton,
                  VarParsing.VarParsing.varType.string,
                  "Upper bin edges in HT of the trigger corrections"
