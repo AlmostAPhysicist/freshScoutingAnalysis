@@ -97,6 +97,8 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources, edm::
       TH1D* h_genWeights;
       TH1D* h_weights;
       TH1D* h_weightsSquared;
+      TH1D* h_weights_LUMCorrected_NoTrigger;
+      TH1D* h_weightsSquared_LUMCorrected_NoTrigger;
       TH1D* h_weights_LUMCorrected;
       TH1D* h_weightsSquared_LUMCorrected;
 
@@ -385,6 +387,8 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
         (*weightMap)["PU_"+fileString+"_"+variationString] = w;
       }
     }
+
+    (*weightMap)["corrected_NoTrigger"] = theWeight * weightMap->at("PU_BCDEFGHI_nominal");
     (*weightMap)["correctedNominal"] = theWeight * weight_trigger_nominal * weightMap->at("PU_BCDEFGHI_nominal");
     (*weightMap)["triggerNominal"] = weight_trigger_nominal;
     (*weightMap)["triggerUp"] = weight_trigger_up;
@@ -395,6 +399,9 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
 
     h_weights->Fill("None",theWeight);
     h_weightsSquared->Fill("None",pow(theWeight,2));
+
+    h_weights_LUMCorrected_NoTrigger->Fill("None",weightMap->at("corrected_NoTrigger"));
+    h_weightsSquared_LUMCorrected_NoTrigger->Fill("None",pow(weightMap->at("corrected_NoTrigger"),2));
 
     h_weights_LUMCorrected->Fill("None",weightMap->at("correctedNominal"));
     h_weightsSquared_LUMCorrected->Fill("None",pow(weightMap->at("correctedNominal"),2));
@@ -447,6 +454,9 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     h_weightsSquared->Fill("Trigger",pow(theWeight,2));
 
     if(isMC){
+      h_weights_LUMCorrected_NoTrigger->Fill("Trigger",weightMap->at("corrected_NoTrigger"));
+      h_weightsSquared_LUMCorrected_NoTrigger->Fill("Trigger",pow(weightMap->at("corrected_NoTrigger"),2));
+
       h_weights_LUMCorrected->Fill("Trigger",weightMap->at("correctedNominal"));
       h_weightsSquared_LUMCorrected->Fill("Trigger",pow(weightMap->at("correctedNominal"),2));
     }
@@ -501,6 +511,9 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     h_weightsSquared->Fill("nJets",pow(theWeight,2));
 
     if(isMC){
+      h_weights_LUMCorrected_NoTrigger->Fill("nJets",weightMap->at("corrected_NoTrigger"));
+      h_weightsSquared_LUMCorrected_NoTrigger->Fill("nJets",pow(weightMap->at("corrected_NoTrigger"),2));
+
       h_weights_LUMCorrected->Fill("nJets",weightMap->at("correctedNominal"));
       h_weightsSquared_LUMCorrected->Fill("nJets",pow(weightMap->at("correctedNominal"),2));
     }
@@ -532,6 +545,11 @@ TriggerFilter::beginJob()
   h_weights->GetXaxis()->SetBinLabel(2,"Trigger");
   h_weights->GetXaxis()->SetBinLabel(3,"nJets");
 
+  h_weights_LUMCorrected_NoTrigger = fs->make<TH1D>("weightsSkimLUMCorrected_NoTrigger",";Cut Applied; Sum of Weights",3,0,3);
+  h_weights_LUMCorrected_NoTrigger->GetXaxis()->SetBinLabel(1,"None");
+  h_weights_LUMCorrected_NoTrigger->GetXaxis()->SetBinLabel(2,"Trigger");
+  h_weights_LUMCorrected_NoTrigger->GetXaxis()->SetBinLabel(3,"nJets");
+
   h_weights_LUMCorrected = fs->make<TH1D>("weightsSkimLUMCorrected",";Cut Applied; Sum of Weights",3,0,3);
   h_weights_LUMCorrected->GetXaxis()->SetBinLabel(1,"None");
   h_weights_LUMCorrected->GetXaxis()->SetBinLabel(2,"Trigger");
@@ -541,6 +559,11 @@ TriggerFilter::beginJob()
   h_weightsSquared->GetXaxis()->SetBinLabel(1,"None");
   h_weightsSquared->GetXaxis()->SetBinLabel(2,"Trigger");
   h_weightsSquared->GetXaxis()->SetBinLabel(3,"nJets");
+
+  h_weightsSquared_LUMCorrected_NoTrigger = fs->make<TH1D>("weightsSquaredSkimLUMCorrected_NoTrigger",";Cut Applied; Sum of Squared Weights",3,0,3);
+  h_weightsSquared_LUMCorrected_NoTrigger->GetXaxis()->SetBinLabel(1,"None");
+  h_weightsSquared_LUMCorrected_NoTrigger->GetXaxis()->SetBinLabel(2,"Trigger");
+  h_weightsSquared_LUMCorrected_NoTrigger->GetXaxis()->SetBinLabel(3,"nJets");
 
   h_weightsSquared_LUMCorrected = fs->make<TH1D>("weightsSquaredSkimLUMCorrected",";Cut Applied; Sum of Squared Weights",3,0,3);
   h_weightsSquared_LUMCorrected->GetXaxis()->SetBinLabel(1,"None");
@@ -581,11 +604,17 @@ TriggerFilter::endJob() {
   h_weights->Draw();
   h_weights->Write();
 
+  h_weights_LUMCorrected_NoTrigger->Draw();
+  h_weights_LUMCorrected_NoTrigger->Write();
+
   h_weights_LUMCorrected->Draw();
   h_weights_LUMCorrected->Write();
 
   h_weightsSquared->Draw();
   h_weightsSquared->Write();
+
+  h_weightsSquared_LUMCorrected_NoTrigger->Draw();
+  h_weightsSquared_LUMCorrected_NoTrigger->Write();
 
   h_weightsSquared_LUMCorrected->Draw();
   h_weightsSquared_LUMCorrected->Write();
