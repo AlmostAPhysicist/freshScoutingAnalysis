@@ -84,6 +84,14 @@ options.register('doJEC',
                  "If HLT jet corrections are applied"
 )
 
+options.register('validation',
+                 True,
+                 VarParsing.VarParsing.multiplicity.singleton,
+                 VarParsing.VarParsing.varType.bool,
+                 "Validation mode. Disables the event and jet veto."
+)
+
+
 options.parseArguments()
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.options = cms.untracked.PSet(
@@ -95,7 +103,7 @@ process.options = cms.untracked.PSet(
 process.MessageLogger.cerr.FwkSummary.reportEvery = 100
 process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(-1) )
+process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(1000) )
 PUCorrectionData = np.load(options.PUFile)
 UncertaintyCorrectionData = np.load(options.UncertaintyCorrectionFile)
 
@@ -122,7 +130,9 @@ process.source = cms.Source("PoolSource",
         #Run 382255 LS 79
         #'/store/data/Run2024F/ScoutingPFRun3/HLTSCOUT/v1/000/382/255/00000/ac42dc85-581c-438a-b536-3abbfe4eef90.root'
         #New lifetime stop sample
-        #'/StopStopbarTo2Dbar2D_M-400_ctau-0p1mm_100kEvts_v2/brlopesd-StopStopbarTo2Dbar2D_M-400_ctau-0p1mm_100kEvts_step4_miniAOD_v1-df1e99b50d14b85be33e7e4ab518ee3a/USER'
+        #'/store/user/brlopesd/StopStopbarTo2Dbar2D_M-400_ctau-0p1mm_100kEvts_v2/StopStopbarTo2Dbar2D_M-400_ctau-0p1mm_100kEvts_step4_miniAOD_v1/260106_122558/0000/MiniAOD_1.root'
+        #Exotic Higgs sample
+        '/store/mc/RunIII2024Summer24MiniAOD/GluGluH-Hto2Sto4D_Par-ctauS-10-MH-125-MS-15_TuneCP5_13p6TeV_powheg-pythia8/MINIAODSIM/140X_mcRun3_2024_realistic_v26-v2/2550000/009d9b72-008a-4d88-bbb2-79f9a66778fd.root'
     )
 )
 
@@ -302,7 +312,8 @@ process.triggerFilter = cms.EDFilter('TriggerFilter',
                                      triggerNominal = cms.vdouble(*TriggerCorrectionNominal.flatten().tolist()),
                                      triggerUp = cms.vdouble(*TriggerCorrectionUp.flatten().tolist()),
                                      triggerDown = cms.vdouble(*TriggerCorrectionDown.flatten().tolist()),
-                                     triggerEdge = cms.vdouble(*TriggerCorrectionBinEdge.flatten().tolist())
+                                     triggerEdge = cms.vdouble(*TriggerCorrectionBinEdge.flatten().tolist()),
+                                     val = cms.bool(options.validation)
                                      )
 
 process.Vertexer = cms.EDProducer('Vertexer',
@@ -360,7 +371,7 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       doTrigger = cms.bool( True ),
                                       isScouting = cms.bool(options.isScouting),
                                       doPhiCorrection = cms.bool( False ),
-                                      doGenMatching = cms.bool( False ),
+                                      doGenMatching = cms.bool( True ),
                                       fillScoutTrack = cms.bool( True ),
                                       luminosity = cms.double(options.lumi), #2024 luminosity (fb-1)
                                       crossSection = cms.double(options.crossSection), # cross section in fb
@@ -383,11 +394,13 @@ process.scoutingTree = cms.EDAnalyzer('ScoutingTreeMakerRun3',
                                       pfMetPhi          = cms.InputTag("hltScoutingPFPacker","pfMetPhi"),
                                       rho               = cms.InputTag("hltScoutingPFPacker","rho"),
                                       beamspot_src = cms.InputTag('offlineBeamSpot'),
-                                      genParticle_src = cms.InputTag('genParticles',''),
+                                      genParticle_src = cms.InputTag('prunedGenParticles',''), #genParticles not available in miniAOD, only prunedGenParticless
                                       genJet_src = cms.InputTag('slimmedGenJets',''),
                                       generatorName = cms.InputTag('generator'),
                                       scoutingParticle = scoutingPFTag,
-                                      weightMap = cms.InputTag("triggerFilter", "weightMap")
+                                      weightMap = cms.InputTag("triggerFilter", "weightMap"),
+                                      val = cms.bool(options.validation),
+                                      LLP_pdgId = cms.int32(1000006) #1000006 for stop, 9000006 for the exotic Higgs decay
                                       )
 # Usually it is better to put producers on a task instead of a path
 # but paths also work.

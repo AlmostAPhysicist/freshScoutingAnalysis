@@ -182,6 +182,10 @@ private:
   std::vector<bool>            l1Result_;
   const edm::EDGetTokenT<std::map<std::string, float>> weightsToken_;
 
+  bool isValidation;
+  
+  int LLP_pdgId;
+
   std::vector<double> triggerNominal;
   std::vector<double> triggerUp;
   std::vector<double> triggerDown;
@@ -488,38 +492,63 @@ private:
   }
   
   std::pair<bool,GlobalPoint> isStopDecay(const reco::Candidate* part){
-    if(fabs(part->pdgId())==1000006 && part->numberOfDaughters()==2){
-      int daughterId = part->daughter(0)->pdgId();
-      bool sameDaughters = (daughterId==part->daughter(1)->pdgId());
-      if(sameDaughters && fabs(daughterId)==1){
-	return std::make_pair(true, GlobalPoint(part->daughter(0)->vx(),part->daughter(0)->vy(),part->daughter(0)->vz()));
-      }
+    if(fabs(part->pdgId()) == LLP_pdgId && part->numberOfDaughters() == 2){
+        if(!part->daughter(0) || !part->daughter(1)) 
+            return std::make_pair(false, GlobalPoint(-999,-999,-999));
+        
+        int d0 = part->daughter(0)->pdgId();
+        int d1 = part->daughter(1)->pdgId();
+        bool areQuarks = (abs(d0) >= 1 && abs(d0) <= 6 &&
+                          abs(d1) >= 1 && abs(d1) <= 6);
+        // covers both stop (same sign) and HToSS (quark-antiquark)
+        bool validPair = (d0 == d1) || (d0 == -d1);
+        
+        if(areQuarks && validPair)
+            return std::make_pair(true, GlobalPoint(part->daughter(0)->vx(),
+                                                  part->daughter(0)->vy(),
+                                                  part->daughter(0)->vz()));
     }
     return std::make_pair(false, GlobalPoint(-999,-999,-999));
   }
 
   std::pair<bool,GlobalPoint> isStopDecay(std::vector<reco::GenParticle>::const_iterator part){
-    if(fabs(part->pdgId())==1000006 && part->numberOfDaughters()==2){
-      int daughterId = part->daughter(0)->pdgId();
-      bool sameDaughters = (daughterId==part->daughter(1)->pdgId());
-      if(sameDaughters && fabs(daughterId)==1){
-	return std::make_pair(true, GlobalPoint(part->daughter(0)->vx(),part->daughter(0)->vy(),part->daughter(0)->vz()));
-      }
+    if(fabs(part->pdgId()) == LLP_pdgId && part->numberOfDaughters() == 2){
+        if(!part->daughter(0) || !part->daughter(1)) 
+            return std::make_pair(false, GlobalPoint(-999,-999,-999));
+        
+        int d0 = part->daughter(0)->pdgId();
+        int d1 = part->daughter(1)->pdgId();
+        bool areQuarks = (abs(d0) >= 1 && abs(d0) <= 6 &&
+                          abs(d1) >= 1 && abs(d1) <= 6);
+        // covers both stop (same sign) and HToSS (quark-antiquark)
+        bool validPair = (d0 == d1) || (d0 == -d1);
+        
+        if(areQuarks && validPair)
+            return std::make_pair(true, GlobalPoint(part->daughter(0)->vx(),
+                                                  part->daughter(0)->vy(),
+                                                  part->daughter(0)->vz()));
     }
     return std::make_pair(false, GlobalPoint(-999,-999,-999));
   }
 
-  std::pair<bool,GlobalPoint> isChargedStopDecayProductStatusOne(std::vector<reco::GenParticle>::const_iterator part){
-    if(part->status()!=1 || part->charge()==0 || part->numberOfMothers()==0) return std::make_pair(false,GlobalPoint(-999,-999,-999));
+
+std::pair<bool,GlobalPoint> isChargedStopDecayProductStatusOne(std::vector<reco::GenParticle>::const_iterator part){
+    if(part->charge() == 0 || part->numberOfMothers() == 0) //used to be status one
+        return std::make_pair(false, GlobalPoint(-999,-999,-999));
+    
     const reco::Candidate* candidate = part->mother(0);
-    std::pair<bool,GlobalPoint> isStopProduct = std::make_pair(false,GlobalPoint(-999,-999,-999));
-    while(!isStopProduct.first){
-      isStopProduct = isStopDecay(candidate);
-      if(candidate->numberOfMothers()==0) break;
-      candidate = candidate->mother(0);
+    std::pair<bool,GlobalPoint> isLLPProduct = std::make_pair(false, GlobalPoint(-999,-999,-999));
+    
+    while(!isLLPProduct.first){
+        if(!candidate) break;
+        isLLPProduct = isStopDecay(candidate);
+        if(isLLPProduct.first) break;
+        if(candidate->numberOfMothers() == 0) break;
+        candidate = candidate->mother(0);
+        if(!candidate) break;
     }
-    return isStopProduct;
-  }
+    return isLLPProduct;
+}
   
   const reco::Candidate* getFinalCopy(std::vector<reco::GenParticle>::const_iterator part){
     const reco::Candidate* candidate = part->clone();
@@ -682,7 +711,9 @@ ScoutingTreeMakerRun3::ScoutingTreeMakerRun3(const edm::ParameterSet& iConfig):
   crossSection        (iConfig.existsAs<double>("crossSection")    ?    iConfig.getParameter<double>  ("crossSection") : 1.0),
   PUCorrectionArray(iConfig.getParameter<std::vector<double>>("PUCorrectionArray")),
   isMC                    (iConfig.existsAs<bool>("isMC")               ?    iConfig.getParameter<bool>  ("isMC")            : false),
-  weightsToken_(consumes<std::map<std::string, float>>(edm::InputTag("triggerFilter", "weightMap")))
+  weightsToken_(consumes<std::map<std::string, float>>(edm::InputTag("triggerFilter", "weightMap"))),
+  isValidation(iConfig.getParameter<bool>("val")),
+  LLP_pdgId(iConfig.getParameter<int>("LLP_pdgId"))
 {
     usesResource("TFileService");
     if (doTrigger) {
@@ -1117,19 +1148,22 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   ht_corrected = 0;
   int imuon = 0;
 
+  bool matches_muon;
+
   for (auto jet: pfJetVector) {
     if((jet.pt() > 30) && (abs(jet.eta()) < 2.4)){    
+      matches_muon = false;
       for (auto muon : selectedMuons) {
         dEta_jet_mu = jet.eta() - muon->eta();
         dPhi_jet_mu = deltaPhi(jet.phi(), muon->phi());
         dR_jet_mu = sqrt(pow(dEta_jet_mu, 2) + pow(dPhi_jet_mu, 2));
                 
-          if(dR_jet_mu >= 0.20)
-            ht_corrected = ht_corrected + jet.pt();
-        
+          if(dR_jet_mu <= 0.20)
+            matches_muon = true;
+
         imuon++;
       }
-      if(imuon == 0) //in case there are no muons, ofc the jet is isolated
+      if(!matches_muon) 
         ht_corrected = ht_corrected + jet.pt();
     }
   }
@@ -1285,7 +1319,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   
     nVertices = vertices_ntk.size();
 
-    if (nVertices<1) return;
+    if (nVertices<1 && !isValidation) return;
     
     h_genWeights->Fill("nVertices",genWeight);
     h_weights->Fill("nVertices",theWeight);
@@ -1369,77 +1403,110 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
   edm::Handle<std::vector<reco::GenParticle>> genParticle_handle;
   std::vector<GlobalPoint> genVertices;
   
-  if(isMC && doGenMatching){
-    //Get gen particles for truth-level vertices
+ if(isMC && doGenMatching){
     iEvent.getByToken(GenParticleToken_,genParticle_handle);
-    
+
+   /* //debugging printouts 
+    for(genParticleIter = genParticle_handle->begin(); genParticleIter != genParticle_handle->end(); ++genParticleIter){
+        if(abs(genParticleIter->pdgId()) == LLP_pdgId || 
+          abs(genParticleIter->pdgId()) == 25 ||  // Higgs
+          abs(genParticleIter->pdgId()) == 1) {    // down quarks
+            std::cout << "pdgId: " << genParticleIter->pdgId()
+                      << " status: " << genParticleIter->status()
+                      << " nDaughters: " << genParticleIter->numberOfDaughters()
+                      << " nMothers: " << genParticleIter->numberOfMothers()
+                      << " vx: " << genParticleIter->vx()
+                      << " vy: " << genParticleIter->vy()
+                      << " vz: " << genParticleIter->vz();
+              if(genParticleIter->numberOfDaughters()>0)
+                  std::cout << " daughter0 pdgId: " << genParticleIter->daughter(0)->pdgId();
+              if(genParticleIter->numberOfDaughters()>1)
+                  std::cout << " daughter1 pdgId: " << genParticleIter->daughter(1)->pdgId();
+            std::cout << std::endl;
+        }
+    } */
+
     float maxDist = 0;
     for(genParticleIter = genParticle_handle->begin(); genParticleIter != genParticle_handle->end(); ++genParticleIter){
-      if(genParticleIter->numberOfMothers()<1) continue;
-      if(isStopDecay(genParticleIter->mother(0)).first){
-	//std::cout<<"isStop block"<<std::endl;
-	//std::cout<<"pdgid: "<<genParticleIter->pdgId()<<" vertex xyz: "<<genParticleIter->vx()<<" "<<genParticleIter->vy()<<" "<<genParticleIter->vz()<<" status: "<<genParticleIter->status()<<" parent id: "<<genParticleIter->mother(0)->pdgId()<<" parent vertex: "<<genParticleIter->mother(0)->vx()<<" "<<genParticleIter->mother(0)->vy()<<" "<<genParticleIter->mother(0)->vz()<<" parent status: "<<genParticleIter->mother(0)->status()<<std::endl;
-	float dist = TMath::Sqrt(pow(genParticleIter->vx()-beamspot->x0(),2)+pow(genParticleIter->vy()-beamspot->y0(),2));
-	const reco::Candidate* mother = genParticleIter->mother(0);
-	while(mother->mother(0)->pdgId()==mother->pdgId()){
-	  mother = mother->mother(0);
-	}
-      
-	bool isDupe = false;
-	GlobalPoint genVertex = GlobalPoint(genParticleIter->vx(),genParticleIter->vy(),genParticleIter->vz());
-	for(auto vertex: genVertices){
-	  if((vertex.x()==genVertex.x()) && (vertex.y()==genVertex.y()) && (vertex.z()==genVertex.z())) isDupe = true;
-	}
-	if(!isDupe){
-	  genVertices.push_back(genVertex);
-	  h_genVert_dBV->Fill(dist);
-	  genVert_dBV->push_back(dist);
-	  h_genVert_phi->Fill(atan2(genVertex.y()-beamspot->y0(),genVertex.x()-beamspot->x0()));
-	  genVert_phi->push_back(atan2(genVertex.y()-beamspot->y0(),genVertex.x()-beamspot->x0()));
-	  h_genVert_z->Fill(genVertex.z()-beamspot->z0());
-	  genVert_z->push_back(genVertex.z()-beamspot->z0());
-	  h_genVert_x_y->Fill(genVertex.x()-beamspot->x0(),genVertex.y()-beamspot->y0());
-	  genVert_x->push_back(genVertex.x()-beamspot->x0());
-	  genVert_y->push_back(genVertex.y()-beamspot->y0());
-	}
-	//std::cout<<"first mother id: "<<mother->pdgId()<<" status: "<<mother->status()<<" vertex: "<<mother->vx()<<" "<<mother->vy()<<" "<<mother->vz()<<" parent id: "<<mother->mother(0)->pdgId()<<" parent status: "<<mother->mother(0)->status()<<" mother vertex: "<<mother->mother(0)->vx()<<" "<<mother->mother(0)->vy()<<" "<<mother->mother(0)->vz()<<std::endl;
-	if(dist>maxDist){
-	  maxDist = dist;
-	  genVert_x_1 = genParticleIter->vx()-beamspot->x0();
-	  genVert_y_1 = genParticleIter->vy()-beamspot->y0();
-	  genVert_z_1 = genParticleIter->vz()-beamspot->z0();
-	  genVert_dBV_1 = dist;
-	  genVert_3d_1 = TMath::Sqrt(pow(genParticleIter->vx()-beamspot->x0(),2)+pow(genParticleIter->vy()-beamspot->y0(),2)+pow(genParticleIter->vz()-beamspot->z0(),2));
-	  genVert_motherEta = mother->eta();
-	  genVert_motherPhi = mother->phi();
-	  genVert_motherPt = mother->pt();
-	  genVert_motherDistTraveled = TMath::Sqrt(pow(genParticleIter->vx()-mother->mother(0)->vx(),2)+pow(genParticleIter->vy()-mother->mother(0)->vy(),2)+pow(genParticleIter->vz()-mother->mother(0)->vz(),2));
-	}
-      } //isStopDecay
-      std::pair<bool,GlobalPoint> isChargedStopDecayProduct = isChargedStopDecayProductStatusOne(genParticleIter);
-      if(isChargedStopDecayProduct.first){
-	//std::cout<<"pdgid: "<<genParticleIter->pdgId()<<" vertex xyz: "<<genParticleIter->vx()<<" "<<genParticleIter->vy()<<" "<<genParticleIter->vz()<<" status: "<<genParticleIter->status()<<" parent id: "<<genParticleIter->mother(0)->pdgId()<<" parent vertex: "<<genParticleIter->mother(0)->vx()<<" "<<genParticleIter->mother(0)->vy()<<" "<<genParticleIter->mother(0)->vz()<<" parent status: "<<genParticleIter->mother(0)->status()<<std::endl;
-	
-	float dxy = TMath::Sqrt(pow(genParticleIter->vx()-beamspot->x0(),2)+pow(genParticleIter->vy()-beamspot->y0(),2));
-	h_gen_dxy->Fill(dxy);
-	gen_dxy->push_back(dxy);
-	std::pair<double,double> correction = gen_dxy_correction(genParticleIter,beamspot);
-	float dxy_corrected = correction.first;
-	gen_dxyCorrected->push_back(dxy_corrected);
+      // look for the LLP directly
+      if(abs(genParticleIter->pdgId()) != LLP_pdgId) continue;
+      if(genParticleIter->numberOfDaughters() < 2) continue;
+      if(!genParticleIter->daughter(0) || !genParticleIter->daughter(1)) continue;
+
+      // require explicitly the LLP decays to be quarks, filters spurirous R-hadron vertices
+      if(abs(genParticleIter->daughter(0)->pdgId()) < 1 || 
+         abs(genParticleIter->daughter(0)->pdgId()) > 6) continue;
+      if(abs(genParticleIter->daughter(1)->pdgId()) < 1 || 
+         abs(genParticleIter->daughter(1)->pdgId()) > 6) continue;
+
+      // displaced vertex position comes from the daughter
+      GlobalPoint genVertex(genParticleIter->daughter(0)->vx(),
+                            genParticleIter->daughter(0)->vy(),
+                            genParticleIter->daughter(0)->vz());
+
+      float dist = TMath::Sqrt(pow(genVertex.x()-beamspot->x0(),2)+
+                               pow(genVertex.y()-beamspot->y0(),2));
+
+      // get the LLP itself as the "mother" for kinematics
+      const reco::Candidate* mother = &(*genParticleIter);
+
+      bool isDupe = false;
+      for(auto vertex: genVertices){
+        if((vertex.x()==genVertex.x()) && 
+           (vertex.y()==genVertex.y()) && 
+           (vertex.z()==genVertex.z())) isDupe = true;
       }
-    } //loop over gen particles
+      if(!isDupe){
+        genVertices.push_back(genVertex);
+        h_genVert_dBV->Fill(dist);
+        genVert_dBV->push_back(dist);
+        h_genVert_phi->Fill(atan2(genVertex.y()-beamspot->y0(),genVertex.x()-beamspot->x0()));
+        genVert_phi->push_back(atan2(genVertex.y()-beamspot->y0(),genVertex.x()-beamspot->x0()));
+        h_genVert_z->Fill(genVertex.z()-beamspot->z0());
+        genVert_z->push_back(genVertex.z()-beamspot->z0());
+        h_genVert_x_y->Fill(genVertex.x()-beamspot->x0(),genVertex.y()-beamspot->y0());
+        genVert_x->push_back(genVertex.x()-beamspot->x0());
+        genVert_y->push_back(genVertex.y()-beamspot->y0());
+      }
+
+      if(dist>maxDist){
+        maxDist = dist;
+        genVert_x_1 = genVertex.x()-beamspot->x0();
+        genVert_y_1 = genVertex.y()-beamspot->y0();
+        genVert_z_1 = genVertex.z()-beamspot->z0();
+        genVert_dBV_1 = dist;
+        genVert_3d_1 = TMath::Sqrt(pow(genVertex.x()-beamspot->x0(),2)+
+                                   pow(genVertex.y()-beamspot->y0(),2)+
+                                   pow(genVertex.z()-beamspot->z0(),2));
+        genVert_motherEta = mother->eta();
+        genVert_motherPhi = mother->phi();
+        genVert_motherPt = mother->pt();
+        // distance traveled: from production vertex to decay vertex
+        genVert_motherDistTraveled = TMath::Sqrt(
+          pow(genVertex.x()-genParticleIter->vx(),2)+
+          pow(genVertex.y()-genParticleIter->vy(),2)+
+          pow(genVertex.z()-genParticleIter->vz(),2));
+      }
+    } // loop over gen particles
 
     h_genVert_nVertices->Fill(genVertices.size());
     genVert_nVertices = genVertices.size();
-    //count number of gen particles from same vertex
+
+    // count daughters per vertex
     std::vector<int> nMatches(genVertices.size(),0);
     for(genParticleIter = genParticle_handle->begin(); genParticleIter != genParticle_handle->end(); ++genParticleIter){
-      std::pair<bool,GlobalPoint> isChargedStopDecayProduct = isChargedStopDecayProductStatusOne(genParticleIter);
-      if(!isChargedStopDecayProduct.first) continue;
-      uint i = -1;
+      if(abs(genParticleIter->pdgId()) != LLP_pdgId) continue;
+      if(genParticleIter->numberOfDaughters() < 2) continue;
+      if(!genParticleIter->daughter(0) || !genParticleIter->daughter(1)) continue;
+      GlobalPoint decayVertex(genParticleIter->daughter(0)->vx(),
+                              genParticleIter->daughter(0)->vy(),
+                              genParticleIter->daughter(0)->vz());
+      uint i = 0;
       for(auto vertex: genVertices){
-	i++;
-	if((vertex.x()==isChargedStopDecayProduct.second.x()) && (vertex.y()==isChargedStopDecayProduct.second.y()) && (vertex.z()==isChargedStopDecayProduct.second.z())) nMatches[i]++;
+        if((vertex.x()==decayVertex.x()) && 
+           (vertex.y()==decayVertex.y()) && 
+           (vertex.z()==decayVertex.z())) nMatches[i]++;
+        i++;
       }
     }
     for(uint i=0; i<nMatches.size(); i++){
@@ -1448,22 +1515,30 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     }
 
     if(genVertices.size()==2){
-      genVert_dVV_2 = TMath::Sqrt(pow(genVertices[0].x()-genVertices[1].x(),2)+pow(genVertices[0].y()-genVertices[1].y(),2)+pow(genVertices[0].z()-genVertices[1].z(),2));
-      float dPhi = fabs(atan2(genVertices[0].y()-beamspot->y0(),genVertices[0].x()-beamspot->x0())-atan2(genVertices[1].y()-beamspot->y0(),genVertices[1].x()-beamspot->x0()));
+      genVert_dVV_2 = TMath::Sqrt(pow(genVertices[0].x()-genVertices[1].x(),2)+
+                                  pow(genVertices[0].y()-genVertices[1].y(),2)+
+                                  pow(genVertices[0].z()-genVertices[1].z(),2));
+      float dPhi = fabs(atan2(genVertices[0].y()-beamspot->y0(),genVertices[0].x()-beamspot->x0())-
+                        atan2(genVertices[1].y()-beamspot->y0(),genVertices[1].x()-beamspot->x0()));
       if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
       genVert_dPhi_2 = dPhi;
     }
 
     if(genVertices.size()>1){
       for(uint i=0; i<(genVertices.size()-1); i++){
-	for(uint j=i+1; j<genVertices.size(); j++){
-	  float dPhi = fabs(atan2(genVertices[i].y()-beamspot->y0(),genVertices[i].x()-beamspot->x0())-atan2(genVertices[j].y()-beamspot->y0(),genVertices[j].x()-beamspot->x0()));
-	  if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
-	  h_genVert_dPhi->Fill(dPhi);
-	  genVert_dPhi->push_back(dPhi);
-	  h_genVert_dVV->Fill(TMath::Sqrt(pow(genVertices[i].x()-genVertices[j].x(),2)+pow(genVertices[i].y()-genVertices[j].y(),2)+pow(genVertices[i].z()-genVertices[j].z(),2)));
-	  genVert_dVV->push_back(TMath::Sqrt(pow(genVertices[i].x()-genVertices[j].x(),2)+pow(genVertices[i].y()-genVertices[j].y(),2)+pow(genVertices[i].z()-genVertices[j].z(),2)));
-	}
+        for(uint j=i+1; j<genVertices.size(); j++){
+          float dPhi = fabs(atan2(genVertices[i].y()-beamspot->y0(),genVertices[i].x()-beamspot->x0())-
+                            atan2(genVertices[j].y()-beamspot->y0(),genVertices[j].x()-beamspot->x0()));
+          if(dPhi>TMath::Pi()) dPhi = 2*TMath::Pi() - dPhi;
+          h_genVert_dPhi->Fill(dPhi);
+          genVert_dPhi->push_back(dPhi);
+          h_genVert_dVV->Fill(TMath::Sqrt(pow(genVertices[i].x()-genVertices[j].x(),2)+
+                                          pow(genVertices[i].y()-genVertices[j].y(),2)+
+                                          pow(genVertices[i].z()-genVertices[j].z(),2)));
+          genVert_dVV->push_back(TMath::Sqrt(pow(genVertices[i].x()-genVertices[j].x(),2)+
+                                             pow(genVertices[i].y()-genVertices[j].y(),2)+
+                                             pow(genVertices[i].z()-genVertices[j].z(),2)));
+        }
       }
     }
       
@@ -1790,7 +1865,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
     dBV_1 = dBV_Meas1D_1.value();
     bs2derr_1 = dBV_Meas1D_1.error();
 
-    if(dBV_1<0.01) return; 
+    if(dBV_1<0.01 && !isValidation) return; 
 
     h_genWeights->Fill("dBV",genWeight);
     h_weights->Fill("dBV",theWeight);
@@ -1837,7 +1912,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min300_dEta_Max1p5);
       l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min330_dEta_Max1p5);
       L1_FinalResult = L1_HTT280er || L1_ETT2000 || L1_SingleJet180 || L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5;
-      if(!L1_FinalResult) return;
+      if(!L1_FinalResult && !isValidation) return;
       
       h_genWeights->Fill("Trigger",genWeight);
       h_weights->Fill("Trigger",theWeight);
@@ -1859,7 +1934,7 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
 	  if(triggerBits->accept(i)) HLT_FinalResult = true;
 	}
       }
-      if(!HLT_FinalResult) return;
+      if(!HLT_FinalResult && !isValidation) return;
 
       h_genWeights->Fill("Trigger",genWeight);
       h_weights->Fill("Trigger",theWeight);

@@ -118,6 +118,8 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources, edm::
       std::vector<double> triggerDown;
       std::vector<double> triggerEdge;
 
+      bool isValidation;
+
   bool matchesPF(int ID, double tolerance, Run3ScoutingMuon const& muonTrack,  edm::Handle<std::vector<Run3ScoutingParticle>> const& scoutingParticleH){
 
     bool matches = false;
@@ -132,7 +134,7 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources, edm::
     for (size_t pf_index = 0; pf_index < scoutingParticleH->size(); pf_index++) {
       auto & scoutingPFCandidate = scoutingParticleH->at(pf_index);
       if (abs(scoutingPFCandidate.pdgId()) != 13){
-	continue;
+      	continue;
       }
       float pf_eta = scoutingPFCandidate.eta();
       float pf_phi = scoutingPFCandidate.phi();
@@ -142,8 +144,8 @@ class TriggerFilter : public edm::one::EDFilter<edm::one::SharedResources, edm::
       dR = sqrt(pow(dEta, 2) + pow(dPhi, 2));
       
       if(dR < tolerance){
-	matches = true;
-	return matches;
+	      matches = true;
+	      return matches;
       }
     }
     return matches;
@@ -181,7 +183,8 @@ TriggerFilter::TriggerFilter(const edm::ParameterSet& iConfig):
   triggerNominal(iConfig.getParameter<std::vector<double>>("triggerNominal")),
   triggerUp(iConfig.getParameter<std::vector<double>>("triggerUp")),
   triggerDown(iConfig.getParameter<std::vector<double>>("triggerDown")),
-  triggerEdge(iConfig.getParameter<std::vector<double>>("triggerEdge"))
+  triggerEdge(iConfig.getParameter<std::vector<double>>("triggerEdge")),
+  isValidation(iConfig.getParameter<bool>("val"))
 {
   usesResource("TFileService");
   algInputTag_ = iConfig.getParameter<edm::InputTag>("AlgInputTag");
@@ -308,7 +311,7 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
     {
       isPFMuon = matchesPF(13, 0.1, *muons_iter, scoutingParticle_collection_handle);
       if (isPFMuon){
-	selectedMuons.push_back(&(*muons_iter));
+      	selectedMuons.push_back(&(*muons_iter));
       }
     }
   }
@@ -320,19 +323,22 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   float dPhi_jet_mu;
   float dR_jet_mu;
 
+  bool matches_muon;
+
   for (const auto& jet: *pfJetVector) {
     if((jet.pt() > 30) && (abs(jet.eta()) < 2.4)){    
+      matches_muon = false;
       for (auto muon : selectedMuons) {
         dEta_jet_mu = jet.eta() - muon->eta();
         dPhi_jet_mu = deltaPhi(jet.phi(), muon->phi());
         dR_jet_mu = sqrt(pow(dEta_jet_mu, 2) + pow(dPhi_jet_mu, 2));
                 
-          if(dR_jet_mu >= 0.20)
-            ht_corrected = ht_corrected + jet.pt();
-        
+          if(dR_jet_mu <= 0.20)
+            matches_muon = true;
+
         imuon++;
       }
-      if(imuon == 0) //in case there are no muons, ofc the jet is isolated
+      if(!matches_muon) 
         ht_corrected = ht_corrected + jet.pt();
     }
   }
@@ -507,7 +513,8 @@ TriggerFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
   }
   if(isMC) iEvent.put(std::move(weightMap),"weightMap");
   tree->Fill();
-  return passFilter;
+  
+  return passFilter || isValidation;
 }
 
 // ------------ method called once each job just before starting event loop  ------------
