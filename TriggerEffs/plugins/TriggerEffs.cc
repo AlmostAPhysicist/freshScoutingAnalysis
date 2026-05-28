@@ -1,0 +1,789 @@
+// -*- C++ -*-
+//
+// Package:    Run3ScoutingAnalysisTools/TriggerEffs
+// Class:      TriggerEffs
+//
+/**\class TriggerEffs TriggerEffs.cc Run3ScoutingAnalysisTools/TriggerEffs/plugins/TriggerEffs.cc
+
+ Description: [one line class summary]
+
+ Implementation:
+     [Notes on implementation]
+*/
+//
+// Original Author:  Bruno Lopes
+//         Created:  Tue, 09 Sep 2025 16:54:35 GMT
+//
+//
+
+// system include files
+#include <memory>
+#include <TTree.h>
+#include <TLorentzVector.h>
+#include <algorithm>
+#include "TMath.h"
+#include <valarray>
+
+// user include files
+#include "FWCore/Framework/interface/Frameworkfwd.h"
+#include "FWCore/Framework/interface/one/EDAnalyzer.h"
+
+#include "FWCore/Framework/interface/Event.h"
+#include "FWCore/Framework/interface/MakerMacros.h"
+
+#include "FWCore/ParameterSet/interface/ParameterSet.h"
+#include "FWCore/Utilities/interface/InputTag.h"
+
+#include "FWCore/Common/interface/TriggerNames.h"
+#include "DataFormats/Common/interface/TriggerResults.h"
+#include "DataFormats/HLTReco/interface/TriggerEvent.h"
+
+#include "DataFormats/Common/interface/Handle.h"
+#include "DataFormats/TrackReco/interface/Track.h"
+#include "DataFormats/TrackReco/interface/TrackFwd.h"
+#include "DataFormats/VertexReco/interface/Vertex.h"
+#include "DataFormats/VertexReco/interface/VertexFwd.h"
+#include "SimDataFormats/TrackingAnalysis/interface/TrackingParticle.h"
+#include "SimDataFormats/TrackingAnalysis/interface/TrackingVertex.h"
+#include "SimDataFormats/GeneratorProducts/interface/HepMCProduct.h"
+#include "SimDataFormats/GeneratorProducts/interface/GenEventInfoProduct.h"
+#include "SimDataFormats/GeneratorProducts/interface/GenRunInfoProduct.h"
+
+#include "DataFormats/Scouting/interface/Run3ScoutingElectron.h"
+#include "DataFormats/Scouting/interface/Run3ScoutingPhoton.h"
+#include "DataFormats/Scouting/interface/Run3ScoutingPFJet.h"
+#include "DataFormats/Scouting/interface/Run3ScoutingVertex.h"
+#include "DataFormats/Scouting/interface/Run3ScoutingTrack.h"
+#include "DataFormats/Scouting/interface/Run3ScoutingMuon.h"
+#include "DataFormats/Scouting/interface/Run3ScoutingParticle.h"
+
+#include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
+
+#include "RecoVertex/VertexTools/interface/VertexDistance3D.h"
+#include "RecoVertex/VertexTools/interface/VertexDistanceXY.h"
+#include "TrackingTools/IPTools/interface/IPTools.h"
+#include "TrackingTools/Records/interface/TransientTrackRecord.h"
+#include "TrackingTools/TransientTrack/interface/TransientTrack.h"
+#include "TrackingTools/TransientTrack/interface/TransientTrackBuilder.h"
+
+#include "DataFormats/Math/interface/deltaPhi.h"
+
+#include "DataFormats/L1TGlobal/interface/GlobalExtBlk.h"
+
+#include "DataFormats/PatCandidates/interface/Jet.h"
+#include "DataFormats/PatCandidates/interface/PackedCandidate.h"
+#include "DataFormats/PatCandidates/interface/TriggerObjectStandAlone.h"
+#include "DataFormats/PatCandidates/interface/PackedTriggerPrescales.h"
+#include "L1Trigger/L1TGlobal/interface/L1TGlobalUtil.h"
+#include "DataFormats/L1TGlobal/interface/GlobalAlgBlk.h"
+#include "HLTrigger/HLTcore/interface/TriggerExpressionData.h"
+#include "HLTrigger/HLTcore/interface/TriggerExpressionEvaluator.h"
+#include "HLTrigger/HLTcore/interface/TriggerExpressionParser.h"
+
+#include "HLTrigger/HLTcore/interface/HLTConfigProvider.h"
+
+#include "FWCore/ServiceRegistry/interface/Service.h"
+#include "CommonTools/UtilAlgos/interface/TFileService.h" 
+#include "TH2.h"
+
+
+//
+// class declaration
+//
+
+// If the analyzer does not use TFileService, please remove
+// the template argument to the base class so the class inherits
+// from  edm::one::EDAnalyzer<>
+// This will improve performance in multithreaded jobs.
+
+class TriggerEffs : public edm::one::EDAnalyzer<edm::one::SharedResources> {
+public:
+  explicit TriggerEffs(const edm::ParameterSet&);
+  ~TriggerEffs() override;
+
+  static void fillDescriptions(edm::ConfigurationDescriptions& descriptions);
+
+private:
+  void beginJob() override;
+  void analyze(const edm::Event&, const edm::EventSetup&) override;
+  void endJob() override;
+
+  // ----------member data ---------------------------
+  const edm::EDGetTokenT<std::vector<Run3ScoutingPFJet> >  pfjetsToken;
+  const edm::EDGetTokenT<std::vector<reco::PFJet> >  pfjetsTokenCorrected;
+  const edm::EDGetTokenT<GenEventInfoProduct> GeneratorToken_;
+  const edm::EDGetTokenT<edm::TriggerResults> triggerResultsToken;
+
+  std::vector<std::string> triggerPathsVector;
+  std::map<std::string, int> triggerPathsMap;
+
+  float genWeight;
+  float theWeight;
+  float luminosity;
+  float crossSection;
+
+  triggerExpression::Data triggerCache_;
+
+  edm::InputTag                algInputTag_;
+  edm::InputTag                extInputTag_;
+  edm::EDGetToken              algToken_;
+  std::unique_ptr<l1t::L1TGlobalUtil> l1GtUtils_;
+  std::vector<std::string>     l1Seeds_;
+
+  bool hasJEC;
+  bool isMC;
+  TTree* objectTree;
+
+  int nPFJets;
+
+  int nPFJets_jetVeto;
+  float Jet_pt_jetVeto;
+  float Jet_eta_jetVeto;
+  float Jet_phi_jetVeto;
+
+  int nPFJets_jetVeto_dR20;
+  float Jet_pt_jetVeto_dR20;
+  float Jet_eta_jetVeto_dR20;
+  float Jet_phi_jetVeto_dR20;
+
+
+  float ht;
+  float ht_raw;
+  float ht_jetMap;
+  float ht_jetMap_dR20;
+
+  int nPFJets_corrected;
+  float ht_corrected;
+  float ht_corrected_jetVeto;
+  float ht_corrected_jetVeto_dR20;
+
+  float Jet1_pt;
+  float Jet1_eta;
+  float Jet1_phi;
+  float Jet1_pt_corrected;
+  float Jet1_eta_corrected;
+  float Jet1_phi_corrected;
+
+  bool L1_HTT280er;
+  bool L1_ETT2000;
+  bool L1_SingleJet180;
+  bool L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5;
+
+  const edm::EDGetTokenT<std::vector<PileupSummaryInfo>> truePileupToken;
+
+  const edm::EDGetTokenT<std::vector<Run3ScoutingMuon>>      muonsToken;
+  const edm::EDGetTokenT<std::vector<Run3ScoutingParticle>> scoutingParticle_collection_token_;
+  double muon_pt;
+  double muon_eta;
+  double muon_chi2;
+  int muon_trackLayers;
+  int muon_pixelHits;
+  int muon_muonHits;
+  int muon_matchedStation;
+
+  double matchTolerance;
+  double muon_iso;
+  double muon_iso_max;
+
+  int observedPU;
+  int truePU;
+
+  int nMuons;
+  int nSelectedMuons;
+
+  int nPFMuons;
+
+  double mu1s_pt;
+  double mu1s_eta;
+  double mu1s_chi2;
+  int mu1s_trackLayers;
+  int mu1s_pixelHits;
+  int mu1s_muonHits;
+  int mu1s_matchedStation;
+
+  bool passHTTrigger;
+  bool passMuonTrigger;
+
+  bool muonIso;
+  bool isPFMuon;
+
+  std::vector<double> muonsIsoCustom;
+  std::vector<double> muonsIsoDefault;
+  std::vector<int> isPFMuons;
+
+  bool offlineMuon;
+  bool finalMuon;
+
+  //variables for the jet veto
+  TH2F* jetVetoMap_;
+  float Jet_eta;
+  float Jet_pt;
+  float Jet_phi;
+  int binX;
+  int binY;
+  float maskBit;
+  float energy;
+  float Jet_chHEF;
+  float Jet_neHEF;
+  float Jet_muEF;
+  float Jet_chEmEF;
+  float Jet_neEmEF;
+  int Jet_chMultiplicity;
+  int Jet_neMultiplicity;
+  bool Jet_passJetIdTight;
+  bool Jet_passJetIdTightLepVeto;
+  float dEta_jet_mu;
+  float dPhi_jet_mu;
+  float dR_jet_mu;
+
+  bool jetVeto;
+  bool jetVeto_dR20;
+
+  std::vector<float> dRs;
+  float min_dR;
+
+  double MuonTrackIso(Run3ScoutingMuon const& muonTrack, edm::Handle<std::vector<Run3ScoutingParticle>> const& scoutingParticleH){
+
+    double mu_pt = muonTrack.pt();
+    double mu_eta = muonTrack.eta();
+    double mu_phi = muonTrack.phi();
+
+    double pf_pt = 0.0;
+    double pf_eta;
+    double pf_phi;
+
+    double dEta;
+    double dPhi;
+    double dR;
+
+    for (size_t pf_index = 0; pf_index < scoutingParticleH->size(); pf_index++) {
+      auto & scoutingPFCandidate = scoutingParticleH->at(pf_index);
+
+      pf_eta = scoutingPFCandidate.eta();
+      pf_phi = scoutingPFCandidate.phi();
+      
+      dEta = mu_eta - pf_eta;
+      dPhi = deltaPhi(mu_phi, pf_phi);
+      dR = sqrt(pow(dEta, 2) + pow(dPhi, 2));
+
+      if(abs(scoutingPFCandidate.pdgId()) != 13){
+        if(dR < 0.3){
+          pf_pt = pf_pt + scoutingPFCandidate.pt();
+        }
+      }
+    }
+
+    double iso = pf_pt / mu_pt;
+
+    return iso;
+  }
+
+bool matchesPF(int ID, double tolerance, Run3ScoutingMuon const& muonTrack,  edm::Handle<std::vector<Run3ScoutingParticle>> const& scoutingParticleH){
+
+  bool matches = false;
+
+  float mu_eta = muonTrack.eta();
+  float mu_phi = muonTrack.phi();
+
+  double dEta;
+  double dPhi;
+  double dR;
+
+  for (size_t pf_index = 0; pf_index < scoutingParticleH->size(); pf_index++) {
+    auto & scoutingPFCandidate = scoutingParticleH->at(pf_index);
+
+    float pf_eta = scoutingPFCandidate.eta();
+    float pf_phi = scoutingPFCandidate.phi();
+
+    dEta = mu_eta - pf_eta;
+    dPhi = deltaPhi(mu_phi, pf_phi);
+    dR = sqrt(pow(dEta, 2) + pow(dPhi, 2));
+
+    if(abs(scoutingPFCandidate.pdgId()) == 13 && dR < tolerance){
+          matches = true;
+      }
+  }
+  return matches;
+}
+
+};
+
+//
+// constants, enums and typedefs
+//
+
+//
+// static data member definitions
+//
+
+//
+// constructors and destructor
+//
+TriggerEffs::TriggerEffs(const edm::ParameterSet& iConfig):
+    pfjetsToken(consumes<std::vector<Run3ScoutingPFJet> >(iConfig.getParameter<edm::InputTag>("pfjets"))),
+    pfjetsTokenCorrected(consumes<std::vector<reco::PFJet> >(iConfig.getParameter<edm::InputTag>("pfjetsCorrected"))),
+    GeneratorToken_(consumes(iConfig.getParameter<edm::InputTag>("generatorName"))),
+    triggerResultsToken(consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("triggerresults"))),
+    luminosity(iConfig.existsAs<double>("luminosity") ? iConfig.getParameter<double>  ("luminosity") : 1.0),
+    crossSection(iConfig.existsAs<double>("crossSection") ? iConfig.getParameter<double>  ("crossSection") : 1.0),
+    algInputTag_(iConfig.getParameter<edm::InputTag>("AlgInputTag")),
+    extInputTag_(iConfig.getParameter<edm::InputTag>("l1tExtBlkInputTag")), 
+    algToken_(consumes<BXVector<GlobalAlgBlk>>(iConfig.getParameter<edm::InputTag>("AlgInputTag"))),
+    l1Seeds_(iConfig.getParameter<std::vector<std::string>>("l1Seeds")),
+    hasJEC(iConfig.existsAs<bool>("hasJEC") ?  iConfig.getParameter<bool>  ("hasJEC") : false),
+    isMC(iConfig.existsAs<bool>("isMC") ?  iConfig.getParameter<bool>  ("isMC") : false),
+    truePileupToken(consumes<std::vector<PileupSummaryInfo>>(iConfig.getParameter<edm::InputTag>("truePileup"))),
+    muonsToken(consumes<std::vector<Run3ScoutingMuon>>(iConfig.getParameter<edm::InputTag>("scoutingMuon"))),
+    scoutingParticle_collection_token_(consumes(iConfig.getParameter<edm::InputTag>("scoutingParticle"))),
+    muon_pt(iConfig.getParameter<double>("muon_pt")),
+    muon_eta(iConfig.getParameter<double>("muon_eta")),
+    muon_chi2(iConfig.getParameter<double>("muon_chi2")),
+    muon_trackLayers(iConfig.getParameter<int>("muon_trackLayers")),
+    muon_pixelHits(iConfig.getParameter<int>("muon_pixelHits")),
+    muon_muonHits(iConfig.getParameter<int>("muon_muonHits")),
+    muon_matchedStation(iConfig.getParameter<int>("muon_matchedStation")),
+    matchTolerance(iConfig.getParameter<double>("matchingTolerance")),
+    muon_iso_max(iConfig.getParameter<double>("muon_iso_max"))
+    {
+  //now do what ever initialization is needed
+    usesResource("TFileService");
+
+    algInputTag_ = iConfig.getParameter<edm::InputTag>("AlgInputTag");
+    extInputTag_ = iConfig.getParameter<edm::InputTag>("l1tExtBlkInputTag");
+    algToken_ = consumes<BXVector<GlobalAlgBlk>>(algInputTag_);
+    l1Seeds_ = iConfig.getParameter<std::vector<std::string> >("l1Seeds");
+    l1GtUtils_ = std::make_unique<l1t::L1TGlobalUtil>(iConfig, consumesCollector(), *this, algInputTag_, extInputTag_, l1t::UseEventSetupIn::Event);
+    }
+
+TriggerEffs::~TriggerEffs() {
+  // do anything here that needs to be done at desctruction time
+  // (e.g. close files, deallocate resources etc.)
+  //
+  // please remove this method altogether if it would be left empty
+}
+
+//
+// member functions
+//
+
+// ------------ method called for each event  ------------
+void TriggerEffs::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
+  using namespace edm;
+  using namespace std;
+
+  //Get gen weights if MC
+
+
+  if(isMC){
+    edm::Handle<GenEventInfoProduct> generatorHandle;
+    iEvent.getByToken(GeneratorToken_, generatorHandle);
+    genWeight = generatorHandle->weight();
+    theWeight = genWeight*luminosity*crossSection;
+  }
+  else{
+    genWeight = 1;
+    theWeight = 1;
+  }
+
+    //Pileup info -- only for MC
+
+  observedPU = -1;
+  truePU = -1;
+
+  if(isMC){
+    edm::Handle<std::vector<PileupSummaryInfo>> pileup;
+    iEvent.getByToken(truePileupToken, pileup);
+
+    std::vector<PileupSummaryInfo>::const_iterator pileupIter;
+    for(pileupIter = pileup->begin(); pileupIter != pileup->end(); ++pileupIter){
+      if (pileupIter->getBunchCrossing() == 0) {
+        observedPU = pileupIter->getPU_NumInteractions();
+        truePU = pileupIter->getTrueNumInteractions();
+      }
+    }
+    
+  }
+
+  //Get jet info and calculate H_T
+  nPFJets = -1;                                                                                                                
+  Handle<vector<Run3ScoutingPFJet> > pfjetsH;
+  iEvent.getByToken(pfjetsToken, pfjetsH);
+  std::vector<Run3ScoutingPFJet> pfJetVector;
+
+  //Get HT from the jets
+  //ht_raw is with no jet selection, ht requires pt > 20 GeV, abs(eta) < 2.4
+  ht_raw = 0;
+  ht = 0;
+
+  Jet1_pt = 0;
+  Jet1_eta = 0;
+  Jet1_phi = 0;
+  //HT calculated as in L1
+  if(pfjetsH.isValid()){
+    for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
+      ht_raw = ht_raw + jets_iter->pt();
+      if(jets_iter->pt() > 30 && abs(jets_iter->eta()) < 2.4){ //same requirements as L1_HTTer
+        pfJetVector.push_back(*jets_iter);
+        ht = ht + jets_iter->pt();
+
+        if(jets_iter->pt() > Jet1_pt){
+          Jet1_pt = jets_iter->pt();
+          Jet1_eta = jets_iter->eta();
+          Jet1_phi = jets_iter->phi();
+        }
+      }
+    }
+    nPFJets = pfJetVector.size();
+  }
+
+  //Get the trigger bits for both HT L1 seeds and SingleMuon (DST_PFScouting_SingleMuon_v)
+  l1GtUtils_->retrieveL1(iEvent,iSetup,algToken_);
+
+  l1GtUtils_->getFinalDecisionByName(string("L1_HTT280er"), L1_HTT280er);
+  l1GtUtils_->getFinalDecisionByName(string("L1_ETT2000"), L1_ETT2000);
+  l1GtUtils_->getFinalDecisionByName(string("L1_SingleJet180"), L1_SingleJet180);
+  l1GtUtils_->getFinalDecisionByName(string("L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5"), L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5);
+  passHTTrigger = L1_HTT280er || L1_ETT2000 || L1_SingleJet180 || L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5;
+
+
+  Handle<edm::TriggerResults> triggerBits;
+  iEvent.getByToken(triggerResultsToken, triggerBits);
+  const edm::TriggerNames &names = iEvent.triggerNames(*triggerBits);
+  bool HLT_FinalResult = false;
+  for (unsigned int i = 0, n = triggerBits->size(); i < n; ++i) {
+    std::string name = names.triggerName(i);
+    if((name.find("DST_PFScouting_SingleMuon_v")!=std::string::npos) ){
+       if(triggerBits->accept(i)) HLT_FinalResult = true;
+    }
+  }
+  passMuonTrigger = HLT_FinalResult;
+
+  //Offline muon selection -- tight id, following Run 2 AN (until there are recommendations for 2024)
+  Handle<vector<Run3ScoutingMuon> > muonsH;
+  iEvent.getByToken(muonsToken, muonsH);
+  // Temporary container for selected muons
+  std::vector<const Run3ScoutingMuon*> orderedMuons;
+  std::vector<const Run3ScoutingMuon*> selectedMuons;
+
+  //Get scouting particle flow candidates
+  edm::Handle<std::vector<Run3ScoutingParticle>> scoutingParticleH;
+  iEvent.getByToken(scoutingParticle_collection_token_, scoutingParticleH);
+
+  nPFMuons = 0;
+  for (auto pfcands_iter = scoutingParticleH->begin(); pfcands_iter != scoutingParticleH->end(); ++pfcands_iter) {
+    if (abs(pfcands_iter->pdgId()) == 13) nPFMuons++;
+  }
+
+  muonsIsoCustom.clear();
+  muonsIsoDefault.clear();
+  isPFMuons.clear();
+  nMuons = 0;
+  nSelectedMuons = 0;
+  offlineMuon = false;
+
+  for (auto muons_iter = muonsH->begin(); muons_iter != muonsH->end(); ++muons_iter) {
+    nMuons++;
+    orderedMuons.push_back(&(*muons_iter));
+
+    muon_iso = MuonTrackIso(*muons_iter, scoutingParticleH);
+    isPFMuon = matchesPF(13, matchTolerance, *muons_iter, scoutingParticleH);
+
+    muonsIsoCustom.push_back(muon_iso);
+    muonsIsoDefault.push_back(muons_iter->trackIso());
+    isPFMuons.push_back(isPFMuon ? 1 : 0);
+
+    if (muons_iter->pt() > muon_pt &&
+        abs(muons_iter->eta()) < muon_eta &&
+        muons_iter->normalizedChi2() < muon_chi2 &&
+        muons_iter->nTrackerLayersWithMeasurement() > muon_trackLayers &&
+        muons_iter->nValidPixelHits() > muon_pixelHits &&
+        muons_iter->nValidRecoMuonHits() > muon_muonHits &&
+        muons_iter->nRecoMuonMatchedStations() > muon_matchedStation &&
+        muons_iter->trackIso() < muon_iso_max &&
+        isPFMuon == true) 
+    {
+      offlineMuon = true;
+      selectedMuons.push_back(&(*muons_iter));
+      nSelectedMuons++;
+    }
+  }
+
+  // Sort by pT
+  if(orderedMuons.size() > 1){
+    std::sort(orderedMuons.begin(), orderedMuons.end(),
+              [](const Run3ScoutingMuon* a, const Run3ScoutingMuon* b){ return a->pt() > b->pt(); });
+  }
+
+    // Sort by pT
+  if(selectedMuons.size() > 1){
+    std::sort(selectedMuons.begin(), selectedMuons.end(),
+              [](const Run3ScoutingMuon* a, const Run3ScoutingMuon* b){ return a->pt() > b->pt(); });
+  }
+
+
+  mu1s_pt = -100;
+  mu1s_eta = -100;
+  mu1s_chi2 = -100;
+  mu1s_trackLayers = -100;
+  mu1s_pixelHits = -100;
+  mu1s_muonHits = -100;
+  mu1s_matchedStation = -100;
+
+  // Fill leading selected muon info if it exists
+  if (selectedMuons.size() > 0) {
+    const Run3ScoutingMuon* mu = selectedMuons[0];
+    mu1s_pt = mu->pt();
+    mu1s_eta = mu->eta();
+    mu1s_chi2 = mu->normalizedChi2();
+    mu1s_trackLayers = mu->nTrackerLayersWithMeasurement();
+    mu1s_pixelHits = mu->nValidPixelHits();
+    mu1s_muonHits = mu->nValidRecoMuonHits();
+    mu1s_matchedStation = mu->nRecoMuonMatchedStations();
+  }
+
+  finalMuon = passMuonTrigger && offlineMuon;
+
+  ht_jetMap = 0;
+  ht_jetMap_dR20 = 0;
+
+  jetVeto = false;
+  jetVeto_dR20 = false;
+
+  dRs.clear();
+
+    //Testing the jet requirements for the HT calculation
+  if(pfjetsH.isValid()){
+    for (auto jets_iter = pfjetsH->begin(); jets_iter != pfjetsH->end(); ++jets_iter) {
+      Jet_eta = jets_iter->eta();
+      Jet_pt = jets_iter->pt();
+      Jet_phi = jets_iter->phi();
+      if((Jet_pt > 30) && (abs(Jet_eta) < 2.4)){
+	      binX = jetVetoMap_->GetXaxis()->FindBin(Jet_eta);
+        binY = jetVetoMap_->GetYaxis()->FindBin(jets_iter->phi());
+        maskBit = jetVetoMap_->GetBinContent(binX, binY);
+
+        energy = TMath::Sqrt(pow(TMath::CosH(Jet_eta)*jets_iter->pt(),2)+pow(jets_iter->m(),2));
+        if(energy > 0){
+          Jet_chHEF = jets_iter->chargedHadronEnergy()/energy;
+          Jet_neHEF = jets_iter->neutralHadronEnergy()/energy;
+          Jet_muEF = jets_iter->muonEnergy()/energy;
+          Jet_chEmEF = jets_iter->electronEnergy()/energy;
+          Jet_neEmEF = (jets_iter->photonEnergy()+jets_iter->HFEMEnergy())/energy;
+          Jet_chMultiplicity = jets_iter->chargedHadronMultiplicity()+jets_iter->electronMultiplicity()+jets_iter->muonMultiplicity();
+          Jet_neMultiplicity = jets_iter->neutralHadronMultiplicity()+jets_iter->photonMultiplicity()+jets_iter->HFHadronMultiplicity()+jets_iter->HFEMMultiplicity();
+          Jet_passJetIdTight = false;
+
+          Jet_passJetIdTight = (Jet_neHEF < 0.99) && (Jet_neEmEF < 0.9) && (Jet_chMultiplicity+Jet_neMultiplicity > 1) && (Jet_chHEF > 0.01) && (Jet_chMultiplicity > 0);
+
+          Jet_passJetIdTightLepVeto = false;
+          Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF < 0.8) && (Jet_chEmEF < 0.8);
+          
+          if((maskBit==0) && Jet_passJetIdTightLepVeto && ((Jet_chEmEF+Jet_neEmEF)<0.9) ){
+            ht_jetMap = ht_jetMap + Jet_pt;
+            
+            bool dR20 = true;
+            
+            for (auto muon : selectedMuons) {
+                dEta_jet_mu = Jet_eta - muon->eta();
+                dPhi_jet_mu = deltaPhi(Jet_phi, muon->phi());
+                dR_jet_mu = sqrt(pow(dEta_jet_mu, 2) + pow(dPhi_jet_mu, 2));
+                dRs.push_back(dR_jet_mu);
+                if(dR_jet_mu < 0.20){
+                  dR20 = false;
+                  jetVeto_dR20 = true;
+                } 
+            }  
+            if(dR20) ht_jetMap_dR20 = ht_jetMap_dR20 + Jet_pt;
+            
+          }
+          else {
+            jetVeto = true;
+            jetVeto_dR20 = true;
+
+          }
+        }
+      }
+    }
+  }
+
+  //do the same for the corrected jets
+  nPFJets_corrected = -1;
+  ht_corrected = 0;
+  ht_corrected_jetVeto = 0;
+  ht_corrected_jetVeto_dR20 = 0;
+
+  Jet1_pt_corrected = 0;
+  Jet1_eta_corrected = 0;
+  Jet1_phi_corrected = 0;
+
+  if(hasJEC){
+    Handle<vector<reco::PFJet> > pfjetsCorrectedH;
+    iEvent.getByToken(pfjetsTokenCorrected, pfjetsCorrectedH);
+    std::vector<reco::PFJet> pfJetVectorCorrected;
+
+    if(pfjetsCorrectedH.isValid()){
+    for (auto jets_iter = pfjetsCorrectedH->begin(); jets_iter != pfjetsCorrectedH->end(); ++jets_iter) {
+      if(jets_iter->pt() > 30 && abs(jets_iter->eta()) < 2.4){ //same requirements as L1_HTTer
+        pfJetVectorCorrected.push_back(*jets_iter);
+        ht_corrected = ht_corrected + jets_iter->pt();
+
+        if(jets_iter->pt() > Jet1_pt_corrected){
+          Jet1_pt_corrected = jets_iter->pt();
+          Jet1_eta_corrected = jets_iter->eta();
+          Jet1_phi_corrected = jets_iter->phi();
+        }
+      
+
+	      binX = jetVetoMap_->GetXaxis()->FindBin(Jet_eta);
+        binY = jetVetoMap_->GetYaxis()->FindBin(jets_iter->phi());
+        maskBit = jetVetoMap_->GetBinContent(binX, binY);
+
+        energy = TMath::Sqrt(pow(TMath::CosH(jets_iter->eta())*jets_iter->pt(),2)+pow(jets_iter->mass(),2));
+        if(energy > 0){
+          Jet_chHEF = jets_iter->chargedHadronEnergy()/energy;
+          Jet_neHEF = jets_iter->neutralHadronEnergy()/energy;
+          Jet_muEF = jets_iter->muonEnergy()/energy;
+          Jet_chEmEF = jets_iter->electronEnergy()/energy;
+          Jet_neEmEF = (jets_iter->photonEnergy()+jets_iter->HFEMEnergy())/energy;
+          Jet_chMultiplicity = jets_iter->chargedHadronMultiplicity()+jets_iter->electronMultiplicity()+jets_iter->muonMultiplicity();
+          Jet_neMultiplicity = jets_iter->neutralHadronMultiplicity()+jets_iter->photonMultiplicity()+jets_iter->HFHadronMultiplicity()+jets_iter->HFEMMultiplicity();
+          Jet_passJetIdTight = false;
+
+          Jet_passJetIdTight = (Jet_neHEF < 0.99) && (Jet_neEmEF < 0.9) && (Jet_chMultiplicity+Jet_neMultiplicity > 1) && (Jet_chHEF > 0.01) && (Jet_chMultiplicity > 0);
+
+          Jet_passJetIdTightLepVeto = false;
+          Jet_passJetIdTightLepVeto = Jet_passJetIdTight && (Jet_muEF < 0.8) && (Jet_chEmEF < 0.8);
+          
+          if((maskBit==0) && Jet_passJetIdTightLepVeto && ((Jet_chEmEF+Jet_neEmEF)<0.9) ){
+            ht_corrected_jetVeto = ht_corrected_jetVeto + jets_iter->pt();
+            
+            bool dR20 = true;
+            
+            for (auto muon : selectedMuons) {
+                dEta_jet_mu = jets_iter->eta() - muon->eta();
+                dPhi_jet_mu = deltaPhi(Jet_phi, muon->phi());
+                dR_jet_mu = sqrt(pow(dEta_jet_mu, 2) + pow(dPhi_jet_mu, 2));
+                dRs.push_back(dR_jet_mu);
+                if(dR_jet_mu < 0.20){
+                  dR20 = false;
+                  jetVeto_dR20 = true;
+                } 
+            }  
+            if(dR20) ht_corrected_jetVeto_dR20 = ht_corrected_jetVeto_dR20 + jets_iter->pt();
+            
+          }
+          else {
+            jetVeto = true;
+            jetVeto_dR20 = true;
+
+          }
+        }
+      }
+
+
+    }
+    nPFJets_corrected = pfJetVectorCorrected.size();
+    }
+  }
+
+  //min_dR = *std::min_element(dRs.begin(), dRs.end());
+  auto min_dR_cand = std::min_element(dRs.begin(), dRs.end());
+  min_dR = (min_dR_cand == dRs.end()) ? -1.0f : *min_dR_cand;
+
+  //std::cout<<"passMuonTrigger: "<< passMuonTrigger <<std::endl;
+  //std::cout<<"offlineMuon: "<< offlineMuon <<std::endl;
+  //std::cout<<"finalMuon: "<< finalMuon <<std::endl;
+
+  objectTree->Fill();
+
+}
+// ------------ method called once each job just before starting event loop  ------------
+void TriggerEffs::beginJob() {
+  // please remove this method if not needed
+  edm::Service<TFileService> fs;
+  objectTree = fs->make<TTree>("objectTree","objectTree");
+
+  TFile* vetoFile = TFile::Open("Summer24Prompt24_RunBCDEFGHI.root", "READ");
+  jetVetoMap_ = (TH2F*)vetoFile->Get("jetvetomap");
+  
+  objectTree->Branch("genWeight",&genWeight, "genWeight/F" );
+  objectTree->Branch("theWeight",&theWeight, "theWeight/F" );
+  
+  objectTree->Branch("ht",&ht, "ht/F" );
+  objectTree->Branch("ht_raw",&ht_raw, "ht_raw/F" );
+  objectTree->Branch("ht_jetMap",&ht_jetMap, "ht_jetMap/F" );
+  objectTree->Branch("ht_jetMap_dR20",&ht_jetMap_dR20, "ht_jetMap_dR20/F" );
+
+  objectTree->Branch("ht_corrected",&ht_corrected, "ht_corrected/F" );
+  objectTree->Branch("ht_corrected_jetVeto",&ht_corrected_jetVeto, "ht_corrected_jetVeto/F" );
+  objectTree->Branch("ht_corrected_jetVeto_dR20",&ht_corrected_jetVeto_dR20, "ht_corrected_jetVeto_dR20/F" );
+
+  objectTree->Branch("nPFJets", &nPFJets, "nPFJets/I");
+  objectTree->Branch("nPFJets_corrected", &nPFJets_corrected, "nPFJets_corrected/I");
+
+  objectTree->Branch("Jet1_pt",&Jet1_pt, "Jet1_pt/F" );
+  objectTree->Branch("Jet1_eta",&Jet1_eta, "Jet1_eta/F" );
+  objectTree->Branch("Jet1_phi",&Jet1_phi, "Jet1_phi/F" );
+
+  objectTree->Branch("Jet1_pt_corrected",&Jet1_pt_corrected, "Jet1_pt_corrected/F" );
+  objectTree->Branch("Jet1_eta_corrected",&Jet1_eta_corrected, "Jet1_eta_corrected/F" );
+  objectTree->Branch("Jet1_phi_corrected",&Jet1_phi_corrected, "Jet1_phi_corrected/F" );
+
+  objectTree->Branch("L1_HTT280er",&L1_HTT280er, "L1_HTT280er/O" );
+  objectTree->Branch("L1_ETT2000",&L1_ETT2000, "L1_ETT2000/O" );
+  objectTree->Branch("L1_SingleJet180",&L1_SingleJet180, "L1_SingleJet180/O" );
+  objectTree->Branch("L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5",&L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5, "L1_DoubleJet30er2p5_Mass_Min250_dEta_Max1p5/O" );
+
+  objectTree->Branch("passHTTrigger",&passHTTrigger, "passHTTrigger/O" );
+  objectTree->Branch("passMuonTrigger",&passMuonTrigger, "passMuonTrigger/O" );
+  objectTree->Branch("offlineMuon",&offlineMuon, "offlineMuon/O" );
+  objectTree->Branch("finalMuon",&finalMuon, "finalMuon/O" );
+
+  objectTree->Branch("jetVeto",&jetVeto, "jetVeto/O" );
+  objectTree->Branch("jetVeto_dR20",&jetVeto_dR20, "jetVeto_dR20/O" );
+
+  objectTree->Branch("min_dR",&min_dR, "min_dR/F" );
+
+  objectTree->Branch("observedPU", &observedPU, "observedPU/I");
+  objectTree->Branch("truePU", &truePU, "truePU/I");
+
+  objectTree->Branch("nMuons",&nMuons, "nMuons/I" );
+  objectTree->Branch("nSelectedMuons",&nSelectedMuons, "nSelectedMuons/I" );
+
+  objectTree->Branch("mu1s_pt",&mu1s_pt, "mu1s_pt/D" );
+  objectTree->Branch("mu1s_eta",&mu1s_eta, "mu1s_eta/D" );
+  objectTree->Branch("mu1s_chi2",&mu1s_chi2, "mu1s_chi2/D" );
+  objectTree->Branch("mu1s_trackLayers",&mu1s_trackLayers, "mu1s_trackLayers/I" );
+  objectTree->Branch("mu1s_pixelHits",&mu1s_pixelHits, "mu1s_pixelHits/I" );
+  objectTree->Branch("mu1s_muonHits",&mu1s_muonHits, "mu1s_muonHits/I" );
+  objectTree->Branch("mu1s_matchedStation",&mu1s_matchedStation, "mu1s_matchedStation/I" );
+
+  objectTree->Branch("nPFMuons",&nPFMuons, "nPFMuons/I" );
+  objectTree->Branch("muonsIsoCustom", &muonsIsoCustom);
+  objectTree->Branch("muonsIsoDefault", &muonsIsoDefault);
+  objectTree->Branch("isPFMuons", &isPFMuons);
+
+}
+
+// ------------ method called once each job just after ending the event loop  ------------
+void TriggerEffs::endJob() {
+  // please remove this method if not needed
+}
+
+// ------------ method fills 'descriptions' with the allowed parameters for the module  ------------
+void TriggerEffs::fillDescriptions(edm::ConfigurationDescriptions& descriptions) {
+  //The following says we do not know what parameters are allowed so do no validation
+  // Please change this to state exactly what you do use, even if it is no parameters
+  edm::ParameterSetDescription desc;
+  desc.setUnknown();
+  descriptions.addDefault(desc);
+
+  //Specify that only 'tracks' is allowed
+  //To use, remove the default given above and uncomment below
+  //edm::ParameterSetDescription desc;
+  //desc.addUntracked<edm::InputTag>("tracks", edm::InputTag("ctfWithMaterialTracks"));
+  //descriptions.addWithDefaultLabel(desc);
+}
+
+//define this as a plug-in
+DEFINE_FWK_MODULE(TriggerEffs);
