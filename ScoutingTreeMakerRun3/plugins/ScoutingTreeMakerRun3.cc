@@ -1282,8 +1282,8 @@ void ScoutingTreeMakerRun3::analyze(const edm::Event& iEvent, const edm::EventSe
       }
       //scoutTrack_nMissingInnerHits->push_back(scoutingTrackIter->missingInnerHits());
     
-      float minPVDxy = 999999;
-      float minPVDz = 999999;
+      // float minPVDxy = 999999;
+      // float minPVDz = 999999;
       /*
       for(primaryVertexIter = primaryVertices->begin(); primaryVertexIter != primaryVertices->end(); ++primaryVertexIter){
 	ttk_transverseDist = IPTools::absoluteTransverseImpactParameter(transientScoutTrack, *primaryVertexIter);
